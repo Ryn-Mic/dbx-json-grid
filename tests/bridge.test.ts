@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Bridge, byteSize, readDraft, saveDraft, type HostPlugin } from '../src/host/bridge';
+import { Bridge, byteSize, clearDraft, readDraft, saveDraft, type HostPlugin } from '../src/host/bridge';
 
 function host() {
   const values = new Map<string, unknown>();
@@ -76,4 +76,81 @@ describe('DBX bridge', () => {
     expect(await saveDraft(bridge, 'x'.repeat(97 * 1024), 'a.json')).toBe(false);
     expect(await readDraft(bridge)).toBeNull();
   });
+  it('invalidates paused and queued saves when clear is requested through a recreated Bridge', async () => {
+    const {bridge,sdk,values} = host();
+    const read = deferred<unknown>(), started = deferred<void>();
+    vi.mocked(sdk.storage!.get).mockImplementationOnce(async () => { started.resolve(); return read.promise; });
+    const save = saveDraft(bridge, '{"private":true}', 'private.json');
+    await started.promise;
+    const queued = saveDraft(new Bridge(sdk), '{"private":"newer"}', 'newer.json');
+    const clear = clearDraft(new Bridge(sdk));
+    expect(sdk.storage!.set).not.toHaveBeenCalled();
+    read.resolve({});
+    expect(await save).toBe(false);
+    expect(await queued).toBe(false);
+    await clear;
+    expect(values.get('drafts.v1')).toEqual({});
+    expect(await readDraft(bridge)).toBeNull();
+  });
+  it('waits for an in-flight Host write before clear and never recreates the deleted draft', async () => {
+    const {bridge,sdk,values} = host();
+    const write = deferred<void>(), started = deferred<void>();
+    vi.mocked(sdk.storage!.set).mockImplementationOnce(async (key, value) => { const snapshot = structuredClone(value); started.resolve(); await write.promise; values.set(key,snapshot); });
+    const save = saveDraft(bridge, '{"private":true}', 'private.json');
+    await started.promise;
+    let cleared = false;
+    const clear = clearDraft(new Bridge(sdk)).then(() => {cleared=true;});
+    await Promise.resolve();
+    expect(cleared).toBe(false);
+    expect(sdk.storage!.set).toHaveBeenCalledTimes(1);
+    write.resolve();
+    expect(await save).toBe(false);
+    await clear;
+    expect(values.get('drafts.v1')).toEqual({});
+  });
+  it('persists the latest save when an older read is still pending', async () => {
+    const {bridge,sdk} = host();
+    const read = deferred<unknown>(), started = deferred<void>();
+    vi.mocked(sdk.storage!.get).mockImplementationOnce(async () => { started.resolve(); return read.promise; });
+    const older = saveDraft(bridge, 'old', 'old.json');
+    await started.promise;
+    const newer = saveDraft(new Bridge(sdk), 'new', 'new.json');
+    read.resolve({});
+    expect(await older).toBe(false);
+    expect(await newer).toBe(true);
+    expect((await readDraft(bridge))?.text).toBe('new');
+  });
+  it('orders older/newer writes and serializes the shared key across workbench identities', async () => {
+    const {bridge,sdk,values} = host();
+    const write = deferred<void>(), started = deferred<void>();
+    vi.mocked(sdk.storage!.set).mockImplementationOnce(async (key,value) => { const snapshot=structuredClone(value);started.resolve();await write.promise;values.set(key,snapshot); });
+    const older = saveDraft(bridge, 'old', 'old.json');
+    await started.promise;
+    const newer = saveDraft(new Bridge(sdk), 'new', 'new.json');
+    const other = saveDraft(new Bridge(sdk,'two'), 'second workbench', 'two.json');
+    expect(sdk.storage!.get).toHaveBeenCalledTimes(1);
+    write.resolve();
+    expect(await older).toBe(false);
+    expect(await newer).toBe(true);
+    expect(await other).toBe(true);
+    expect((await readDraft(bridge))?.text).toBe('new');
+    expect((await readDraft(new Bridge(sdk,'two')))?.text).toBe('second workbench');
+  });
+  it('recovers draft mutation ordering after both read and write failures', async () => {
+    const {bridge,sdk} = host();
+    vi.mocked(sdk.storage!.get).mockRejectedValueOnce(new Error('read failed'));
+    await expect(saveDraft(bridge,'old','old.json')).rejects.toThrow('read failed');
+    vi.mocked(sdk.storage!.set).mockRejectedValueOnce(new Error('write failed'));
+    await expect(saveDraft(new Bridge(sdk),'bad','bad.json')).rejects.toThrow('write failed');
+    await clearDraft(new Bridge(sdk));
+    expect(await saveDraft(bridge,'recovered','ok.json')).toBe(true);
+    expect((await readDraft(bridge))?.text).toBe('recovered');
+  });
+
 });
+
+function deferred<T>() {
+  let resolve!: (value:T|PromiseLike<T>) => void;
+  const promise = new Promise<T>(done => {resolve=done;});
+  return {promise,resolve};
+}

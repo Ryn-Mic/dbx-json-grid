@@ -59,6 +59,7 @@ export function App() {
   const importEpoch = useRef(0);
   const activeIdentity = useRef<string | null>(null);
   const filePickerEpoch = useRef(0);
+  const draftIntent = useRef(0);
   const pendingContext = useRef<{ id: string; newQuery: boolean; epoch: number } | null>(null);
   const t = labels(locale);
   const notify = useCallback((message: string) => {
@@ -136,10 +137,14 @@ export function App() {
     if (!bridge || !draftEnabled) { setDraftStatus('draftOff'); return; }
     if (busy) return;
     const epoch = importEpoch.current;
+    const intent = draftIntent.current;
+    let live = true;
+    const current = () => live && epoch === importEpoch.current && intent === draftIntent.current;
     const timer = setTimeout(() => {
-      void saveDraft(bridge, doc.text, name).then(ok => { if (epoch === importEpoch.current) setDraftStatus(ok ? 'draftSaved' : 'draftLarge'); }, () => { if (epoch === importEpoch.current) setDraftStatus('draftError'); });
+      if (!current()) return;
+      void saveDraft(bridge, doc.text, name).then(ok => { if (current()) setDraftStatus(ok ? 'draftSaved' : 'draftLarge'); }, () => { if (current()) setDraftStatus('draftError'); });
     }, 800);
-    return () => clearTimeout(timer);
+    return () => { live = false; clearTimeout(timer); };
   }, [bridge, draftEnabled, doc.text, name, busy]);
   useEffect(() => {
     const epoch = importEpoch.current;
@@ -308,9 +313,9 @@ export function App() {
             <button onClick={() => { load({ name: 'orders.json', text: SAMPLE }); setMenu(false); }}>{t.sample}</button>
             <button onClick={() => { load({ name: t.untitled, text: '' }); setMenu(false); }}>{t.clear}</button>
             <div className="dropdown-divider" />
-            <label className="menu-check"><input type="checkbox" checked={draftEnabled} disabled={!bridge?.canStore} onChange={event => { setDraftEnabled(event.target.checked); if (!event.target.checked && bridge) run(() => clearDraft(bridge)); }} />{t.draft}</label>
+            <label className="menu-check"><input type="checkbox" checked={draftEnabled} disabled={!bridge?.canStore} onChange={event => { draftIntent.current++; setDraftEnabled(event.target.checked); if (!event.target.checked) { setDraftStatus('draftOff'); if (bridge) run(() => clearDraft(bridge)); } }} />{t.draft}</label>
             <p className="menu-hint">{t.draftInfo}</p>
-            <button onClick={() => run(async () => { const epoch = importEpoch.current; if (bridge) await clearDraft(bridge); if (epoch === importEpoch.current) { setDraftEnabled(false); setMenu(false); } })}>{t.clearDraft}</button>
+            <button onClick={() => { draftIntent.current++; setDraftEnabled(false); setDraftStatus('draftOff'); setMenu(false); if (bridge) run(() => clearDraft(bridge)); }}>{t.clearDraft}</button>
             <label className="font-control">{t.fontSize}<input type="number" min="11" max="20" value={fontSize} onChange={event => setFontSize(Math.max(11, Math.min(20, Number(event.target.value) || 13)))} /></label>
           </div></>}
         </div>

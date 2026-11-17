@@ -128,27 +128,60 @@ export async function createBridge() {
 
 type Draft = { text: string; name: string; updated: number };
 type Drafts = Record<string, Draft>;
-export async function saveDraft(bridge: Bridge, text: string, name: string) {
-  const drafts = await bridge.getState<Drafts>('drafts.v1') ?? {};
-  if (byteSize(text) > 96 * 1024) {
-    delete drafts[bridge.instanceId];
-    await bridge.putState('drafts.v1', drafts);
-    return false;
-  }
-  const entries = Object.entries(drafts).filter(([id]) => id !== bridge.instanceId).sort((a, b) => b[1].updated - a[1].updated).slice(0, 1);
-  const next = Object.fromEntries(entries) as Drafts;
-  Object.defineProperty(next, bridge.instanceId, { enumerable: true, configurable: true, writable: true, value: { text, name, updated: Date.now() } });
-  if (byteSize(JSON.stringify(next)) > 240 * 1024) {
-    for (const id of Object.keys(next)) if (id !== bridge.instanceId) delete next[id];
-  }
-  if (byteSize(JSON.stringify(next)) > 240 * 1024) return false;
-  await bridge.putState('drafts.v1', next);
-  return true;
+type DraftQueue = { tail: Promise<void>; generations: Map<string, number> };
+const draftQueues = new WeakMap<object, DraftQueue>();
+const browserDraftStore = {};
+function draftQueue(bridge: Bridge): DraftQueue {
+  // drafts.v1 is shared by every workbench using the same storage API. Bridge
+  // recreation must not create another queue that races its read/modify/write.
+  const store = bridge.host?.storage ?? bridge.host ?? browserDraftStore;
+  let queue = draftQueues.get(store);
+  if (!queue) { queue = { tail: Promise.resolve(), generations: new Map() }; draftQueues.set(store, queue); }
+  return queue;
 }
-export async function clearDraft(bridge: Bridge) {
-  const drafts = await bridge.getState<Drafts>('drafts.v1') ?? {};
-  delete drafts[bridge.instanceId];
-  await bridge.putState('drafts.v1', drafts);
+function draftIntent(queue: DraftQueue, id: string) {
+  const generation = (queue.generations.get(id) ?? 0) + 1;
+  queue.generations.set(id, generation);
+  return generation;
+}
+function mutateDrafts<T>(queue: DraftQueue, operation: () => Promise<T>): Promise<T> {
+  const result = queue.tail.then(operation);
+  // A failed Host read/write rejects its caller, but does not poison later work.
+  queue.tail = result.then(() => undefined, () => undefined);
+  return result;
+}
+export function saveDraft(bridge: Bridge, text: string, name: string): Promise<boolean> {
+  const queue = draftQueue(bridge), generation = draftIntent(queue, bridge.instanceId);
+  const current = () => queue.generations.get(bridge.instanceId) === generation;
+  return mutateDrafts(queue, async () => {
+    if (!current()) return false;
+    const drafts = await bridge.getState<Drafts>('drafts.v1') ?? {};
+    if (!current()) return false;
+    if (byteSize(text) > 96 * 1024) {
+      delete drafts[bridge.instanceId];
+      await bridge.putState('drafts.v1', drafts);
+      return false;
+    }
+    const entries = Object.entries(drafts).filter(([id]) => id !== bridge.instanceId).sort((a, b) => b[1].updated - a[1].updated).slice(0, 1);
+    const next = Object.fromEntries(entries) as Drafts;
+    Object.defineProperty(next, bridge.instanceId, { enumerable: true, configurable: true, writable: true, value: { text, name, updated: Date.now() } });
+    if (byteSize(JSON.stringify(next)) > 240 * 1024) {
+      for (const id of Object.keys(next)) if (id !== bridge.instanceId) delete next[id];
+    }
+    if (byteSize(JSON.stringify(next)) > 240 * 1024) return false;
+    await bridge.putState('drafts.v1', next);
+    return current();
+  });
+}
+export function clearDraft(bridge: Bridge): Promise<void> {
+  const queue = draftQueue(bridge);
+  draftIntent(queue, bridge.instanceId); // Synchronously invalidate reads/queued saves.
+  return mutateDrafts(queue, async () => {
+    const drafts = await bridge.getState<Drafts>('drafts.v1') ?? {};
+    delete drafts[bridge.instanceId];
+    // Await any earlier write before deleting, including a write already in Host.
+    await bridge.putState('drafts.v1', drafts);
+  });
 }
 export async function readDraft(bridge: Bridge) {
   const drafts = await bridge.getState<Drafts>('drafts.v1');

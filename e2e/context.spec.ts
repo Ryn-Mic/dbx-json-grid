@@ -156,3 +156,59 @@ test('browser file reads and stale import errors are isolated from the next cont
   await expect(page.locator('.cm-content')).toHaveText('');
   await expect(page.getByRole('button',{name:'撤销',exact:true})).toBeDisabled();
 });
+
+for (const stage of ['read', 'write'] as const) {
+  for (const action of ['disable', 'clear'] as const) {
+    test(`${action} draft persistence wins over an in-flight Host ${stage}`, async ({page}) => {
+      await page.addInitScript(({stage}) => {
+        const state = new Map<string,unknown>();
+        let draftReads=0, draftWrites=0;
+        let release:(()=>void)|undefined;
+        const sdk={
+          ready:Promise.resolve(),context:{workbenchId:'one'},locale:'zh-CN',theme:{appearance:'light'},
+          capabilities:{storage:true},copy:async()=>{},
+          storage:{
+            get:async(key:string):Promise<unknown>=>{
+              if(key==='preferences.v1')return {draft:true};
+              if(key==='drafts.v1'){
+                draftReads++;
+                // The first read is boot restoration, the second is autosave.
+                if(stage==='read'&&draftReads===2)await new Promise<void>(done=>{release=done;});
+              }
+              return state.get(key)??null;
+            },
+            set:async(key:string,value:unknown)=>{
+              const snapshot=structuredClone(value);
+              if(key==='drafts.v1'){
+                if(stage==='write'&&draftWrites===0)await new Promise<void>(done=>{release=done;});
+                state.set(key,snapshot);draftWrites++;
+              }else state.set(key,snapshot);
+            },
+            delete:async(key:string)=>{state.delete(key);},
+          },
+        };
+        Object.assign(window,{
+          dbxPlugin:sdk,
+          draftMutationPending:()=>!!release,
+          releaseDraftMutation:()=>{release?.();release=undefined;},
+          draftWriteCount:()=>draftWrites,
+          storedDrafts:()=>state.get('drafts.v1')??{},
+        });
+      },{stage});
+      await page.goto('/');
+      await page.locator('.cm-content').fill('{"private":true}');
+      type DraftControls={draftMutationPending():boolean;releaseDraftMutation():void;draftWriteCount():number;storedDrafts():unknown};
+      await expect.poll(()=>page.evaluate(()=>(window as unknown as DraftControls).draftMutationPending())).toBe(true);
+      await page.getByRole('button',{name:'JSON 工具',exact:true}).click();
+      if(action==='disable')await page.getByRole('checkbox',{name:'记住草稿',exact:true}).uncheck();
+      else await page.getByRole('button',{name:'清除已存草稿',exact:true}).click();
+      await expect(page.locator('.app-footer')).toContainText('仅当前会话');
+      await page.evaluate(()=>(window as unknown as DraftControls).releaseDraftMutation());
+      await expect.poll(()=>page.evaluate(()=>(window as unknown as DraftControls).draftWriteCount())).toBe(stage==='write'?2:1);
+      expect(await page.evaluate(()=>(window as unknown as DraftControls).storedDrafts())).toEqual({});
+      await expect(page.locator('.app-footer')).not.toContainText('草稿已保存');
+      if(action==='clear')await page.getByRole('button',{name:'JSON 工具',exact:true}).click();
+      await expect(page.getByRole('checkbox',{name:'记住草稿',exact:true})).not.toBeChecked();
+    });
+  }
+}
