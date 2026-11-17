@@ -55,14 +55,21 @@ export function App() {
   const workbench = useRef<HTMLDivElement>(null);
   const editorRef = useRef<EditorView | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const pendingContext = useRef<{ id: string; newQuery: boolean } | null>(null);
+  // Epochs distinguish even one → two → one identity cycles while I/O is pending.
+  const importEpoch = useRef(0);
+  const activeIdentity = useRef<string | null>(null);
+  const filePickerEpoch = useRef(0);
+  const pendingContext = useRef<{ id: string; newQuery: boolean; epoch: number } | null>(null);
   const t = labels(locale);
   const notify = useCallback((message: string) => {
     setToast(message); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(''), 5000);
   }, []);
   const error = useCallback((cause: unknown) => notify(cause instanceof Error ? cause.message : String(cause)), [notify]);
   const resetLocation = () => { setSelected([]); setFocus([]); setQuery(''); setMatchIndex(0); setExpansion('default'); setExpansionVersion(v => v + 1); };
-  const load = (file: { name: string; text: string }) => { doc.edit(file.text); setName(file.name); setModal(null); resetLocation(); };
+  const load = (file: { name: string; text: string }, epoch = importEpoch.current) => {
+    if (epoch !== importEpoch.current) return;
+    doc.edit(file.text); setName(file.name); setModal(null); resetLocation();
+  };
 
   useEffect(() => {
     let live = true;
@@ -76,6 +83,7 @@ export function App() {
       if (prefs?.fontSize && prefs.fontSize >= 11 && prefs.fontSize <= 20) setFontSize(prefs.fontSize);
       setDraftEnabled(prefs?.draft === true);
       if (saved) { doc.edit(saved.text); setName(saved.name); }
+      activeIdentity.current = next.instanceId;
       setBridge(next);
     })().catch(cause => { if (live) setBootError(cause instanceof Error ? cause.message : String(cause)); });
     return () => { live = false; clearTimeout(toastTimer.current); };
@@ -95,40 +103,48 @@ export function App() {
   useEffect(() => {
     if (!bridge?.host?.onContext) return;
     return bridge.host.onContext(context => {
-      const id = String(context.workbenchId ?? bridge.instanceId);
-      if (id === bridge.instanceId) return; // Ordinary invocation updates preserve this instance's edits.
-      pendingContext.current = { id, newQuery: context.newQuery === true };
+      const id = String(context.workbenchId ?? activeIdentity.current ?? bridge.instanceId);
+      if (id === activeIdentity.current) return; // Ordinary invocation updates preserve this instance's edits.
+      activeIdentity.current = id;
+      const epoch = ++importEpoch.current;
+      pendingContext.current = { id, newQuery: context.newQuery === true, epoch };
+      clearTimeout(toastTimer.current); setToast('');
       setBusy(true); setModal(null); doc.reset(''); setName(t.untitled); resetLocation();
       setBridge(new Bridge(bridge.host, id));
     });
   }, [bridge]);
   useEffect(() => {
     const pending = pendingContext.current;
-    if (!bridge || !pending || pending.id !== bridge.instanceId) return;
+    if (!bridge || !pending || pending.id !== bridge.instanceId || pending.epoch !== importEpoch.current) return;
     pendingContext.current = null;
     let live = true;
     void (async () => {
       const saved = draftEnabled && !pending.newQuery ? await readDraft(bridge) : null;
-      if (!live) return;
+      if (!live || pending.epoch !== importEpoch.current) return;
       if (saved) { doc.reset(saved.text); setName(saved.name); }
       setBusy(false);
-    })().catch(cause => { if (live) { error(cause); setBusy(false); } });
+    })().catch(cause => { if (live && pending.epoch === importEpoch.current) { error(cause); setBusy(false); } });
     return () => { live = false; };
   }, [bridge]);
   useEffect(() => {
     if (!bridge?.canStore) return;
-    const timer = setTimeout(() => { void bridge.putState('preferences.v1', { split, draft: draftEnabled, fontSize }).catch(error); }, 300);
+    const epoch = importEpoch.current;
+    const timer = setTimeout(() => { void bridge.putState('preferences.v1', { split, draft: draftEnabled, fontSize }).catch(cause => { if (epoch === importEpoch.current) error(cause); }); }, 300);
     return () => clearTimeout(timer);
   }, [bridge, split, draftEnabled, fontSize, error]);
   useEffect(() => {
     if (!bridge || !draftEnabled) { setDraftStatus('draftOff'); return; }
     if (busy) return;
+    const epoch = importEpoch.current;
     const timer = setTimeout(() => {
-      void saveDraft(bridge, doc.text, name).then(ok => setDraftStatus(ok ? 'draftSaved' : 'draftLarge'), () => setDraftStatus('draftError'));
+      void saveDraft(bridge, doc.text, name).then(ok => { if (epoch === importEpoch.current) setDraftStatus(ok ? 'draftSaved' : 'draftLarge'); }, () => { if (epoch === importEpoch.current) setDraftStatus('draftError'); });
     }, 800);
     return () => clearTimeout(timer);
   }, [bridge, draftEnabled, doc.text, name, busy]);
-  useEffect(() => bridge?.onDrop(load, error), [bridge, error]);
+  useEffect(() => {
+    const epoch = importEpoch.current;
+    return bridge?.onDrop(file => load(file, epoch), cause => { if (epoch === importEpoch.current) error(cause); });
+  }, [bridge, error]);
   useEffect(() => {
     if (!dragging) return;
     const move = (event: PointerEvent) => {
@@ -164,16 +180,19 @@ export function App() {
   }, [value, focus]);
   const structured = value !== undefined;
   const run = (operation: () => void | Promise<unknown>) => {
-    try { const result = operation(); if (result instanceof Promise) void result.catch(error); } catch (cause) { error(cause); }
+    const epoch = importEpoch.current;
+    const currentError = (cause: unknown) => { if (epoch === importEpoch.current) error(cause); };
+    try { const result = operation(); if (result instanceof Promise) void result.catch(currentError); } catch (cause) { currentError(cause); }
   };
   const action = (kind: NodeAction, path: JsonPath) => run(async () => {
+    const epoch = importEpoch.current;
     if (value === undefined) return;
     const target = getAt(value, path);
     setSelected(path);
     if (kind === 'focus') { setFocus(path); return; }
     if (kind.startsWith('copy')) {
       const text = kind === 'copy-path' ? formatPath(path) : kind === 'copy-key' ? String(path.at(-1) ?? '$') : stringifyJson(target, 2);
-      await bridge?.copy(text); notify(t.copied); return;
+      await bridge?.copy(text); if (epoch === importEpoch.current) notify(t.copied); return;
     }
     const nodeKind = typeOf(target) as Kind;
     setModalError('');
@@ -207,22 +226,30 @@ export function App() {
   };
   const exportJSON = async (node = false) => {
     if (value === undefined || !bridge) return;
+    const epoch = importEpoch.current;
     setBusy(true);
-    try { if (await bridge.save(node ? 'selection.json' : name, stringifyJson(node ? getAt(value, selected) : value, 2))) notify(t.exported); }
-    finally { setBusy(false); }
+    try { if (await bridge.save(node ? 'selection.json' : name, stringifyJson(node ? getAt(value, selected) : value, 2)) && epoch === importEpoch.current) notify(t.exported); }
+    finally { if (epoch === importEpoch.current) setBusy(false); }
   };
   const openFile = async () => {
     if (!bridge) return;
-    if (!bridge.canOpenNative) { fileInput.current?.click(); return; }
+    const epoch = importEpoch.current;
+    if (!bridge.canOpenNative) { filePickerEpoch.current = epoch; fileInput.current?.click(); return; }
     setBusy(true);
-    try { const file = await bridge.open(); if (file) load(file); }
-    finally { setBusy(false); }
+    try { const file = await bridge.open(); if (file) load(file, epoch); }
+    finally { if (epoch === importEpoch.current) setBusy(false); }
   };
-  const fromFile = async (file?: File) => {
-    if (!file) return;
+  const paste = async () => {
+    if (!bridge) return;
+    const epoch = importEpoch.current;
+    const text = await bridge.paste();
+    load({ name: t.untitled, text }, epoch);
+  };
+  const fromFile = async (file?: File, epoch = importEpoch.current) => {
+    if (!file || epoch !== importEpoch.current) return;
     if (file.size > MAX_FILE_BYTES) throw new Error(t.onlyJSON);
     const bytes = await file.arrayBuffer();
-    load({ name: file.name, text: new TextDecoder('utf-8', { fatal: true }).decode(bytes).replace(/^\uFEFF/, '') });
+    if (epoch === importEpoch.current) load({ name: file.name, text: new TextDecoder('utf-8', { fatal: true }).decode(bytes).replace(/^\uFEFF/, '') }, epoch);
   };
   const expand = (next: ViewProps['expansion']) => { setExpansion(next); setExpansionVersion(version => version + 1); };
   useEffect(() => {
@@ -265,7 +292,7 @@ export function App() {
       <div className="filename"><FileJson size={16} /><span>{name}</span><span className="file-badge">JSON</span></div>
       <div className="file-actions">
         <button className="text-button" onClick={() => run(openFile)} disabled={!bridge || busy}><FolderOpen size={15} /><span>{t.open}</span></button>
-        <button className="text-button" onClick={() => run(async () => { const text = await bridge!.paste(); load({ name: t.untitled, text }); })} disabled={!bridge?.canPaste || busy}><ClipboardPaste size={15} /><span>{t.paste}</span></button>
+        <button className="text-button" onClick={() => run(paste)} disabled={!bridge?.canPaste || busy}><ClipboardPaste size={15} /><span>{t.paste}</span></button>
         <div className="toolbar-divider" />
         <IconButton label={t.undo} disabled={!doc.canUndo || busy} onClick={doc.undo}><Undo2 size={15} /></IconButton>
         <IconButton label={t.redo} disabled={!doc.canRedo || busy} onClick={doc.redo}><Redo2 size={15} /></IconButton>
@@ -283,7 +310,7 @@ export function App() {
             <div className="dropdown-divider" />
             <label className="menu-check"><input type="checkbox" checked={draftEnabled} disabled={!bridge?.canStore} onChange={event => { setDraftEnabled(event.target.checked); if (!event.target.checked && bridge) run(() => clearDraft(bridge)); }} />{t.draft}</label>
             <p className="menu-hint">{t.draftInfo}</p>
-            <button onClick={() => run(async () => { if (bridge) await clearDraft(bridge); setDraftEnabled(false); setMenu(false); })}>{t.clearDraft}</button>
+            <button onClick={() => run(async () => { const epoch = importEpoch.current; if (bridge) await clearDraft(bridge); if (epoch === importEpoch.current) { setDraftEnabled(false); setMenu(false); } })}>{t.clearDraft}</button>
             <label className="font-control">{t.fontSize}<input type="number" min="11" max="20" value={fontSize} onChange={event => setFontSize(Math.max(11, Math.min(20, Number(event.target.value) || 13)))} /></label>
           </div></>}
         </div>
@@ -311,7 +338,7 @@ export function App() {
       </section>
     </main>
     <footer className="app-footer"><span><span className={`status-dot ${doc.error ? 'error' : ''}`} />{doc.error ? 'JSON ERROR' : 'JSON'}</span><span>{displayBytes(byteSize(doc.text))}</span><span>{draftEnabled ? t[draftStatus as 'draftSaved'] : t.draftOff}</span><span className="footer-right">{bridge?.embedded ? 'DBX' : 'JSON Grid'}<span>v0.1.0</span></span></footer>
-    <input ref={fileInput} type="file" accept="application/json,.json,.txt" hidden onChange={event => { run(() => fromFile(event.target.files?.[0])); event.target.value = ''; }} />
+    <input ref={fileInput} type="file" accept="application/json,.json,.txt" hidden onChange={event => { run(() => fromFile(event.target.files?.[0], filePickerEpoch.current)); event.target.value = ''; }} />
     {!bridge && <div className="boot-overlay"><Grid2X2 className="boot-icon" size={28} /><span>{bootError || t.loading}</span>{bootError && <button className="text-button" onClick={() => window.location.reload()}>{locale === 'zh-CN' ? '重新加载' : 'Reload'}</button>}</div>}
     {toast && <div role="status" className="toast"><Check size={15} /><span>{toast}</span><button aria-label={t.close} onClick={() => setToast('')}><X size={13} /></button></div>}
     {modal && <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setModal(null); }}><form className="modal" role="dialog" aria-modal="true" aria-label={t[modal.mode === 'edit' ? 'edit' : modal.mode]} onSubmit={event => { event.preventDefault(); applyModal(); }}><div className="modal-heading"><h2>{t[modal.mode === 'edit' ? 'edit' : modal.mode]}</h2><IconButton label={t.close} onClick={() => setModal(null)} type="button"><X size={17} /></IconButton></div><code className="modal-path">{formatPath(modal.path)}</code>
