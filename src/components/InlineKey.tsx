@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Highlight } from "./InlineValue";
 import { viewLabels } from "./viewLabels";
 import type { ViewProps } from "./types";
+import { useInlineDismiss } from "./useInlineDismiss";
 
 export function InlineKey({
   name,
@@ -25,6 +26,12 @@ export function InlineKey({
     [draft, setDraft] = useState(name),
     [error, setError] = useState(""),
     [started, setStarted] = useState(revision);
+  const cancel = useCallback(() => {
+    setEditing(false);
+    setDraft("");
+    setError("");
+  }, []);
+  const editor = useInlineDismiss(editing, cancel);
   useEffect(() => {
     setEditing(false);
     setError("");
@@ -38,7 +45,7 @@ export function InlineKey({
     setEditing(true);
   };
   return editing && started === revision ? (
-    <span className="jg-inline-editor jg-key-editor">
+    <span className="jg-inline-editor jg-key-editor" ref={editor}>
       <input
         autoFocus
         aria-label={`${t.editKey} ${name}`}
@@ -49,8 +56,7 @@ export function InlineKey({
         onKeyDown={(e) => {
           e.stopPropagation();
           if (e.key === "Escape") {
-            setEditing(false);
-            setError("");
+            cancel();
           }
           if (e.key === "Enter" && !disabled && started === revision) {
             e.preventDefault();

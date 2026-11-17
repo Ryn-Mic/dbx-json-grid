@@ -3,7 +3,7 @@
   "manifest_version": 1,
   "id": "io.github.ryn-mic.json-grid",
   "name": "JSON Grid",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "publisher": "ryn-mic",
   "description": "Explore and edit JSON as nested grids, trees and source.",
   "icon": "assets/plugin.svg",

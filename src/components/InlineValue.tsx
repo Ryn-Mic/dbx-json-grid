@@ -1,7 +1,8 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { parseJson, stringifyJson, typeOf, type JsonValue } from "../core/json";
 import { viewLabels, viewSummary } from "./viewLabels";
 import type { ViewProps } from "./types";
+import { useInlineDismiss } from "./useInlineDismiss";
 export function Highlight({ text, query }: { text: string; query: string }) {
   if (!query) return <>{text}</>;
   // Escape the user's literal query; regexp positions refer to the original text.
@@ -41,6 +42,12 @@ export function InlineValue({
     [draft, setDraft] = useState(""),
     [error, setError] = useState(""),
     [editRevision, setEditRevision] = useState(revision);
+  const cancel = useCallback(() => {
+    setEditing(false);
+    setDraft("");
+    setError("");
+  }, []);
+  const editor = useInlineDismiss(editing, cancel);
   useEffect(() => {
     setEditing(false);
     setError("");
@@ -77,7 +84,7 @@ export function InlineValue({
     }
   }
   return editing && editRevision === revision ? (
-    <span className="jg-inline-editor">
+    <span className="jg-inline-editor" ref={editor}>
       <input
         aria-label={t.editValue}
         autoFocus
@@ -88,8 +95,7 @@ export function InlineValue({
           e.stopPropagation();
           if (e.key === "Enter") commit();
           if (e.key === "Escape") {
-            setEditing(false);
-            setError("");
+            cancel();
           }
         }}
       />
