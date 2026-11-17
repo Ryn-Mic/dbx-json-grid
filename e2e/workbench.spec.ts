@@ -1,3 +1,4 @@
+import { replaceSource } from './editor';
 import { test, expect } from '@playwright/test';
 
 test('real source, inline grid edit and shared undo preserve large integers', async ({ page }) => {
@@ -20,7 +21,7 @@ test('real source, inline grid edit and shared undo preserve large integers', as
 test('tree search, literal special-key path copy, invalid source and undo', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/');
-  await page.locator('.cm-content').fill('{"a.b":[{"weird key":9007199254740993}],"other":null}');
+  await replaceSource(page, page.locator('.cm-content'), '{"a.b":[{"weird key":9007199254740993}],"other":null}');
   await page.getByRole('tab', { name: '树形', exact: true }).click();
   await page.getByRole('textbox', { name: '搜索键和值…' }).fill('weird key');
   await expect(page.locator('.selection-bar code')).toHaveText('$["a.b"][0]["weird key"]');
@@ -28,7 +29,7 @@ test('tree search, literal special-key path copy, invalid source and undo', asyn
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('$["a.b"][0]["weird key"]');
   await page.getByRole('button', { name: '只显示匹配项' }).click();
   await expect(page.getByRole('treeitem').filter({ hasText: 'other' })).toHaveCount(0);
-  await page.locator('.cm-content').fill('{"a":');
+  await replaceSource(page, page.locator('.cm-content'), '{"a":');
   await expect(page.locator('.parse-error')).toBeVisible();
   await expect(page.getByRole('button', { name: '编辑值', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: '撤销', exact: true }).click();
@@ -37,7 +38,7 @@ test('tree search, literal special-key path copy, invalid source and undo', asyn
 
 test('typed dialog, locale switch, responsive layout and file export', async ({ page }) => {
   await page.goto('/');
-  await page.locator('.cm-content').fill('{"value":"001","empty":[]}');
+  await replaceSource(page, page.locator('.cm-content'), '{"value":"001","empty":[]}');
   await page.locator('.view-pane').getByText('"001"', { exact: true }).click();
   await page.getByRole('button', { name: '编辑值', exact: true }).click();
   const dialog = page.getByRole('dialog');
@@ -62,7 +63,7 @@ test('official DBX dev host sandbox loads bundled UI, copy, input and live theme
   await page.getByRole('button', { name: 'JSON Grid', exact: true }).click();
   const frame = page.frameLocator('iframe');
   await expect(frame.getByRole('tab', { name: '网格', exact: true })).toBeVisible();
-  await frame.locator('.cm-content').fill('{"local":9007199254740993}');
+  await replaceSource(page, frame.locator('.cm-content'), '{"local":9007199254740993}');
   await expect(frame.locator('.view-pane').getByText('9007199254740993', { exact: true })).toBeVisible();
   await expect(frame.getByRole('button', { name: '复制 JSONPath', exact: true })).toBeEnabled();
   await frame.getByRole('button', { name: '复制 JSONPath', exact: true }).click();

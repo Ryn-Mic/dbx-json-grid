@@ -1,3 +1,4 @@
+import { replaceSource } from './editor';
 import { test, expect } from '@playwright/test';
 
 test('repeated invocation keeps edits; a new Host identity resets source and history', async ({ page }) => {
@@ -13,14 +14,14 @@ test('repeated invocation keeps edits; a new Host identity resets source and his
     Object.assign(window, { dbxPlugin: sdk, switchTestContext: (next: Context) => { sdk.context = next; for (const fn of listeners) fn(next); } });
   });
   await page.goto('/');
-  await page.locator('.cm-content').fill('{"private":"one"}');
+  await replaceSource(page, page.locator('.cm-content'), '{"private":"one"}');
   await page.evaluate(() => (window as unknown as { switchTestContext(value: unknown): void }).switchTestContext({ workbenchId: 'one', invocation: 'repeat' }));
   await expect(page.locator('.cm-content')).toContainText('"one"');
   await page.evaluate(() => (window as unknown as { switchTestContext(value: unknown): void }).switchTestContext({ workbenchId: 'two', newQuery: true }));
   await expect(page.locator('.cm-content')).toHaveText('');
   await expect(page.getByRole('button', { name: '撤销', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: '重做', exact: true })).toBeDisabled();
-  await page.locator('.cm-content').fill('{"public":"two"}');
+  await replaceSource(page, page.locator('.cm-content'), '{"public":"two"}');
   await expect(page.locator('.view-pane').getByText('"two"', { exact: true })).toBeVisible();
 });
 
@@ -196,7 +197,7 @@ for (const stage of ['read', 'write'] as const) {
         });
       },{stage});
       await page.goto('/');
-      await page.locator('.cm-content').fill('{"private":true}');
+      await replaceSource(page, page.locator('.cm-content'), '{"private":true}');
       type DraftControls={draftMutationPending():boolean;releaseDraftMutation():void;draftWriteCount():number;storedDrafts():unknown};
       await expect.poll(()=>page.evaluate(()=>(window as unknown as DraftControls).draftMutationPending())).toBe(true);
       await page.getByRole('button',{name:'JSON 工具',exact:true}).click();

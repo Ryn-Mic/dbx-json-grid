@@ -1,3 +1,4 @@
+import { replaceSource } from './editor';
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
@@ -9,9 +10,9 @@ test('valid source schema replacement clears stale sort and keeps the workbench 
   await page.goto('/');
   const source = page.locator('.cm-content');
   const view = page.locator('.view-pane');
-  await source.fill('[{"a":2},{"a":1}]');
+  await replaceSource(page, source, '[{"a":2},{"a":1}]');
   await view.getByRole('button', { name: '排序 a', exact: true }).click();
-  await source.fill('[{"b":2},{"b":1}]');
+  await replaceSource(page, source, '[{"b":2},{"b":1}]');
   await expect(view.getByRole('button', { name: '排序 b', exact: true })).toBeVisible();
   await expect(view.locator('.jg-value')).toHaveText(['2', '1']);
   await expect(view.getByRole('textbox', { name: '筛选 b', exact: true })).toHaveValue('');
@@ -31,11 +32,11 @@ for (const scenario of [
     await page.goto('/');
     const source = page.locator('.cm-content');
     const view = page.locator('.view-pane');
-    await source.fill(scenario.before);
+    await replaceSource(page, source, scenario.before);
     await view.getByText(scenario.target, { exact: true }).dblclick();
     const inline = view.locator('.jg-inline-editor input');
     await inline.fill('stale draft');
-    await source.fill(scenario.after);
+    await replaceSource(page, source, scenario.after);
     await expect(inline).toHaveCount(0);
     await expect(source).not.toContainText('stale draft');
     const pendingDownload = page.waitForEvent('download');
