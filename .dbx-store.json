@@ -14,7 +14,7 @@
   ],
   "homepage": "https://github.com/Ryn-Mic/dbx-json-grid",
   "license": "MIT",
-  "releaseNotes": "Source block highlighting, inline field/column renaming, draggable split and every column, compact index, icon filters, and single-toggle nested grids that grow parent columns. Removed subtree focus.",
+  "releaseNotes": "Remember each grid/tree tab independently: expansion, selection, search, filters, widths, sorting, page and scroll position. Preserve state during temporary invalid input; reset on a new document.",
   "localizations": {
     "zh-CN": {
       "name": "JSON Grid",

@@ -3,10 +3,10 @@ import CodeMirror from '@uiw/react-codemirror';
 import { json } from '@codemirror/lang-json';
 import { EditorView } from '@codemirror/view';
 import { ArrowDown, ArrowUp, Braces, Check, ChevronRight, ChevronsDownUp, ChevronsUpDown, ClipboardPaste, Copy, Download, FileJson, FolderOpen, Grid2X2, ListTree, Maximize2, Minimize2, Moon, MoreHorizontal, Plus, Redo2, Search, ShieldCheck, SlidersHorizontal, Sun, Undo2, X } from 'lucide-react';
-import { findMatches, formatPath, getAt, insertAt, parseJson, removeAt, renameAt, renameColumn, setAt, stringifyJson, typeOf, type JsonPath, type JsonValue } from './core/json';
+import { formatPath, getAt, insertAt, parseJson, removeAt, renameAt, renameColumn, setAt, stringifyJson, typeOf, type JsonPath, type JsonValue } from './core/json';
 import { Bridge, byteSize, clearDraft, createBridge, MAX_FILE_BYTES, readDraft, saveDraft, type Appearance, type Locale } from './host/bridge';
-import { GridView } from './components/GridView';
-import { TreeView } from './components/TreeView';
+import { ViewPanels } from './components/ViewPanels';
+import { useViewSession } from './useViewSession';
 import type { NodeAction, ViewProps } from './components/types';
 import { labels } from './labels';
 import { SAMPLE } from './sample';
@@ -28,21 +28,17 @@ function displayBytes(bytes: number) { return bytes < 1024 ? `${bytes} B` : byte
 
 export function App() {
   const doc = useDocument(SAMPLE);
+  const value = doc.value;
   const [bridge, setBridge] = useState<Bridge | null>(null);
   const [locale, setLocale] = useState<Locale>('zh-CN');
   const [appearance, setAppearance] = useState<Appearance>('light');
   const [name, setName] = useState('orders.json');
   const [tab, setTab] = useState<'grid' | 'tree'>('grid');
-  const [selected, setSelected] = useState<JsonPath>([]);
-  const [selectionActive, setSelectionActive] = useState(false);
-  const [selectionVersion, setSelectionVersion] = useState(0);
-  const lastScrolledSelection = useRef(0);
-  const select = useCallback((path: JsonPath) => { setSelected(path); setSelectionActive(true); setSelectionVersion(v => v + 1); }, []);
-  const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState(false);
-  const [matchIndex, setMatchIndex] = useState(0);
-  const [expansion, setExpansion] = useState<ViewProps['expansion']>('default');
-  const [expansionVersion, setExpansionVersion] = useState(0);
+  const gridSession = useViewSession(value), treeSession = useViewSession(value);
+  const session = tab === 'grid' ? gridSession : treeSession;
+  const { selected, setSelected, selectionActive, selectionVersion, select, query, setQuery, filter, setFilter, matches, activeIndex, chooseMatch, expansion, expand } = session;
+  const [viewEpoch, setViewEpoch] = useState(0);
+  const lastScrolledSelection = useRef('');
   const [layout, setLayout] = useState<'split' | 'source' | 'view'>('split');
   const [split, setSplit] = useState(37);
   const [fontSize, setFontSize] = useState(13);
@@ -71,7 +67,7 @@ export function App() {
     setToast(message); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(''), 5000);
   }, []);
   const error = useCallback((cause: unknown) => notify(cause instanceof Error ? cause.message : String(cause)), [notify]);
-  const resetLocation = () => { setSelected([]); setSelectionActive(false); setQuery(''); setMatchIndex(0); setExpansion('default'); setExpansionVersion(v => v + 1); };
+  const resetLocation = () => { gridSession.reset(); treeSession.reset(); setViewEpoch(epoch => epoch + 1); };
   const load = (file: { name: string; text: string }, epoch = importEpoch.current) => {
     if (epoch !== importEpoch.current) return;
     doc.edit(file.text); setName(file.name); setModal(null); resetLocation();
@@ -155,21 +151,6 @@ export function App() {
     const epoch = importEpoch.current;
     return bridge?.onDrop(file => load(file, epoch), cause => { if (epoch === importEpoch.current) error(cause); });
   }, [bridge, error]);
-  const value = doc.value;
-  useEffect(() => {
-    if (value !== undefined) try { getAt(value, selected); } catch { setSelected([]); }
-  }, [value, selected]);
-  const matches = useMemo(() => value === undefined ? [] : findMatches(value, query), [value, query]);
-  useEffect(() => { setMatchIndex(0); }, [query]);
-  const activeIndex = matches.length ? matchIndex % matches.length : 0;
-  const chooseMatch = (direction: number) => {
-    if (!matches.length) return;
-    const next = (activeIndex + direction + matches.length) % matches.length;
-    setMatchIndex(next); select(matches[next]);
-  };
-  useEffect(() => {
-    if (query && matches.length) { select(matches[0]); }
-  }, [matches, query]);
   const selectedValue = useMemo(() => {
     if (value === undefined) return undefined;
     try { return getAt(value, selected); } catch { return value; }
@@ -246,7 +227,7 @@ export function App() {
     const bytes = await file.arrayBuffer();
     if (epoch === importEpoch.current) load({ name: file.name, text: new TextDecoder('utf-8', { fatal: true }).decode(bytes).replace(/^\uFEFF/, '') }, epoch);
   };
-  const expand = (next: ViewProps['expansion']) => { setExpansion(next); setExpansionVersion(version => version + 1); };
+
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if (modal) {
@@ -275,10 +256,11 @@ export function App() {
   useEffect(() => {
     const editor = editorRef.current;
     if (!editor || editor.state.doc.toString() !== doc.text) return;
-    const scroll = selectionVersion !== lastScrolledSelection.current;
-    lastScrolledSelection.current = selectionVersion;
+    const token = `${tab}:${selectionVersion}`;
+    const scroll = token !== lastScrolledSelection.current;
+    lastScrolledSelection.current = token;
     editor.dispatch({ effects: [highlightSource.of(selectedRange), ...(scroll && selectedRange ? [EditorView.scrollIntoView(selectedRange.from, { y: 'nearest' })] : [])] });
-  }, [selectedRange, doc.text, selectionVersion]);
+  }, [selectedRange, doc.text, selectionVersion, tab]);
   const rename = (path: JsonPath, key: string, column?: string) => {
     doc.apply(current => column === undefined ? renameAt(current, path, key) : renameColumn(current, path, column, key));
     if (column === undefined) select([...path.slice(0, -1), key]);
@@ -286,7 +268,7 @@ export function App() {
       select([...selected.slice(0, path.length + 1), key, ...selected.slice(path.length + 2)]);
     }
   };
-  const viewProps: ViewProps | null = value === undefined ? null : { value, revision: doc.text, path: [], selected, onSelect: select, onEdit: requestEdit, onRename: rename, onCommit: (path, next) => run(() => doc.apply(current => setAt(current, path, next))), onAction: action, query, filter, expansion, expansionVersion, disabled: !bridge || busy, locale };
+  const viewProps = (view: ReturnType<typeof useViewSession>, active: boolean): Omit<ViewProps, 'value'> => ({ revision: doc.text, path: [], selected: view.selected, onSelect: view.select, onEdit: requestEdit, onRename: rename, onCommit: (path, next) => run(() => doc.apply(current => setAt(current, path, next))), onAction: action, query: view.query, filter: view.filter, expansion: view.expansion, expansionVersion: view.expansionVersion, disabled: !bridge || busy || !structured || !active, active: active && structured, locale });
 
   return <div className={`app ${dragging ? 'resizing' : ''}`}>
     <header className="app-header">
@@ -341,14 +323,14 @@ export function App() {
       <ResizeHandle className="resize-handle" label={t.split} value={split} min={20} max={80} step={2} onChange={setSplit} onDragging={setDragging} onDoubleClick={() => setSplit(37)} axis={() => window.innerWidth <= 640 ? 'y' : 'x'} scale={() => { const rect = workbench.current!.getBoundingClientRect(); return (window.innerWidth <= 640 ? rect.height : rect.width) / 100; }} />
 
       <section className="view-pane" aria-label={t.schema}>
-        <div className="pane-header view-header"><div className="view-tabs" role="tablist"><button role="tab" aria-selected={tab === 'grid'} onClick={() => setTab('grid')}><Grid2X2 size={14} />{t.grid}</button><button role="tab" aria-selected={tab === 'tree'} onClick={() => setTab('tree')}><ListTree size={15} />{t.tree}</button></div><div className="pane-actions"><IconButton label={t.expand} onClick={() => expand('all')} disabled={!structured}><ChevronsUpDown size={14} /></IconButton><IconButton label={t.collapse} onClick={() => expand('none')} disabled={!structured}><ChevronsDownUp size={14} /></IconButton><select className="depth-select" aria-label={t.depth} value={typeof expansion === 'number' ? String(expansion) : ''} onChange={event => { if (event.target.value) expand(Number(event.target.value)); }}><option value="">{t.depth}</option>{[1, 2, 3, 4].map(depth => <option value={depth} key={depth}>{depth}</option>)}</select><IconButton label={layout === 'view' ? t.split : t.focusView} onClick={() => setLayout(layout === 'view' ? 'split' : 'view')}>{layout === 'view' ? <Minimize2 size={13} /> : <Maximize2 size={13} />}</IconButton></div></div>
+        <div className="pane-header view-header"><div className="view-tabs" role="tablist"><button role="tab" id="grid-tab" aria-controls="grid-panel" aria-selected={tab === 'grid'} onClick={() => setTab('grid')}><Grid2X2 size={14} />{t.grid}</button><button role="tab" id="tree-tab" aria-controls="tree-panel" aria-selected={tab === 'tree'} onClick={() => setTab('tree')}><ListTree size={15} />{t.tree}</button></div><div className="pane-actions"><IconButton label={t.expand} onClick={() => expand('all')} disabled={!structured}><ChevronsUpDown size={14} /></IconButton><IconButton label={t.collapse} onClick={() => expand('none')} disabled={!structured}><ChevronsDownUp size={14} /></IconButton><select className="depth-select" aria-label={t.depth} value={typeof expansion === 'number' ? String(expansion) : ''} onChange={event => { if (event.target.value) expand(Number(event.target.value)); }}><option value="">{t.depth}</option>{[1, 2, 3, 4].map(depth => <option value={depth} key={depth}>{depth}</option>)}</select><IconButton label={layout === 'view' ? t.split : t.focusView} onClick={() => setLayout(layout === 'view' ? 'split' : 'view')}>{layout === 'view' ? <Minimize2 size={13} /> : <Maximize2 size={13} />}</IconButton></div></div>
         <div className="search-toolbar"><div className="search-field"><Search size={14} /><input ref={searchInput} placeholder={t.search} aria-label={t.search} value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') chooseMatch(event.shiftKey ? -1 : 1); if (event.key === 'Escape') setQuery(''); }} />{query && <><span className="match-count">{matches.length ? `${activeIndex + 1}/${matches.length}` : '0/0'}</span><IconButton label={t.previous} disabled={!matches.length} onClick={() => chooseMatch(-1)}><ArrowUp size={12} /></IconButton><IconButton label={t.next} disabled={!matches.length} onClick={() => chooseMatch(1)}><ArrowDown size={12} /></IconButton><IconButton label={t.close} onClick={() => setQuery('')}><X size={12} /></IconButton></>}</div><IconButton label={t.filter} active={filter} onClick={() => setFilter(!filter)}><SlidersHorizontal size={15} /></IconButton></div>
         <nav className="breadcrumbs" aria-label="JSONPath"><button onClick={() => select([])}><Braces size={12} /><span>$</span></button>{selected.map((key, index) => <span className="crumb" key={index}><ChevronRight size={11} /><button onClick={() => select(selected.slice(0, index + 1))}>{String(key)}</button></span>)}<span className="view-hint">{t.help}</span></nav>
-        <div className="view-content">{viewProps ? tab === 'grid' ? <GridView {...viewProps} /> : <TreeView {...viewProps} /> : <div className="empty-state"><div className="empty-icon"><Braces size={32} /></div><h2>{doc.error ? t.invalid : t.empty}</h2><p>{doc.error ?? t.onlyJSON}</p>{!doc.error && <button className="text-button" onClick={() => load({ name: 'orders.json', text: SAMPLE })}>{t.sample}<ChevronRight size={14} /></button>}</div>}</div>
+        <div className="view-content"><ViewPanels key={viewEpoch} value={value} tab={tab} grid={viewProps(gridSession, tab === 'grid')} tree={viewProps(treeSession, tab === 'tree')}><div className="empty-state"><div className="empty-icon"><Braces size={32} /></div><h2>{doc.error ? t.invalid : t.empty}</h2><p>{doc.error ?? t.onlyJSON}</p>{!doc.error && <button className="text-button" onClick={() => load({ name: 'orders.json', text: SAMPLE })}>{t.sample}<ChevronRight size={14} /></button>}</div></ViewPanels></div>
         <div className="selection-bar"><span className={`type-dot type-${selectedValue === undefined ? 'null' : typeOf(selectedValue)}`} /><span className="node-type">{selectedValue === undefined ? '—' : typeOf(selectedValue)}</span><code title={formatPath(selected)}>{formatPath(selected)}</code><div className="selection-actions"><IconButton label={t.copyPath} disabled={!structured || !bridge?.canCopy} onClick={() => action('copy-path', selected)}><Copy size={13} /></IconButton><IconButton label={t.edit} disabled={!structured || busy} onClick={() => requestEdit(selected)}><Braces size={13} /></IconButton><IconButton label={t.add} disabled={!structured || !['object', 'array'].includes(typeOf(selectedValue ?? null))} onClick={() => action('add', selected)}><Plus size={14} /></IconButton></div></div>
       </section>
     </main>
-    <footer className="app-footer"><span><span className={`status-dot ${doc.error ? 'error' : ''}`} />{doc.error ? 'JSON ERROR' : 'JSON'}</span><span>{displayBytes(byteSize(doc.text))}</span><span>{draftEnabled ? t[draftStatus as 'draftSaved'] : t.draftOff}</span><span className="footer-right">{bridge?.embedded ? 'DBX' : 'JSON Grid'}<span>v0.2.0</span></span></footer>
+    <footer className="app-footer"><span><span className={`status-dot ${doc.error ? 'error' : ''}`} />{doc.error ? 'JSON ERROR' : 'JSON'}</span><span>{displayBytes(byteSize(doc.text))}</span><span>{draftEnabled ? t[draftStatus as 'draftSaved'] : t.draftOff}</span><span className="footer-right">{bridge?.embedded ? 'DBX' : 'JSON Grid'}<span>v0.2.1</span></span></footer>
     <input ref={fileInput} type="file" accept="application/json,.json,.txt" hidden onChange={event => { run(() => fromFile(event.target.files?.[0], filePickerEpoch.current)); event.target.value = ''; }} />
     {!bridge && <div className="boot-overlay"><Grid2X2 className="boot-icon" size={28} /><span>{bootError || t.loading}</span>{bootError && <button className="text-button" onClick={() => window.location.reload()}>{locale === 'zh-CN' ? '重新加载' : 'Reload'}</button>}</div>}
     {toast && <div role="status" className="toast"><Check size={15} /><span>{toast}</span><button aria-label={t.close} onClick={() => setToast('')}><X size={13} /></button></div>}

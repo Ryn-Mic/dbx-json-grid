@@ -19,4 +19,6 @@ export interface ViewProps {
   expansionVersion: number;
   disabled: boolean;
   locale: Locale;
+  /** Inactive cached panels must not scroll the document or steal focus. */
+  active?: boolean;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   childrenOf,
   findMatches,
@@ -21,7 +21,18 @@ export function TreeView(props: ViewProps) {
   const { value, path, selected, query, filter } = props,
     [open, setOpen] = useState(new Set<string>()),
     [scroll, setScroll] = useState(0),
+    [viewportHeight, setViewportHeight] = useState(560),
     viewport = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (props.active === false || !viewport.current) return;
+    const element = viewport.current;
+    const measure = () => setViewportHeight(element.clientHeight || 560);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [props.active]);
   useEffect(() => {
     const next = new Set<string>();
     function visit(p: JsonPath, depth: number) {
@@ -78,11 +89,11 @@ export function TreeView(props: ViewProps) {
     (r) => pathKey(r.path) === pathKey(selected),
   );
   useEffect(() => {
-    if (query && selectedIndex >= 0 && viewport.current) {
+    if (query && props.active !== false && selectedIndex >= 0 && viewport.current) {
       viewport.current.scrollTop = Math.max(0, selectedIndex * 28 - 84);
       setScroll(viewport.current.scrollTop);
     }
-  }, [selectedIndex, query]);
+  }, [selectedIndex, query, props.active]);
   function toggle(p: JsonPath, recursive = false) {
     setOpen((previous) => {
       const next = new Set(previous),
@@ -104,7 +115,7 @@ export function TreeView(props: ViewProps) {
   const start = Math.max(0, Math.floor(scroll / 28) - 8),
     visible = rows.slice(
       start,
-      start + Math.ceil((viewport.current?.clientHeight || 560) / 28) + 16,
+      start + Math.ceil(viewportHeight / 28) + 16,
     );
   return (
     <div className="jg-tree-wrap">

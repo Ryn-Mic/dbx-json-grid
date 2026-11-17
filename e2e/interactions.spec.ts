@@ -74,7 +74,7 @@ test("tree and grid field names edit with collision protection, undo and stale-d
 }) => {
   await page.goto("/");
   const source = page.locator(".cm-content"),
-    view = page.locator(".view-pane");
+    view = page.getByRole("tabpanel");
   await replaceSource(page, source, '{"old":9007199254740993,"taken":2}');
   await view
     .locator(".jg-row-key .jg-key")
@@ -116,7 +116,7 @@ test("column header rename includes filtered rows and rejects any destination co
 }) => {
   await page.goto("/");
   const source = page.locator(".cm-content"),
-    view = page.locator(".view-pane");
+    view = page.getByRole("tabpanel");
   await replaceSource(page, source, '[{"a":1},{"a":2,"taken":3}]');
   await view.getByRole("button", { name: "筛选 a", exact: true }).click();
   await view.getByRole("textbox", { name: "筛选 a", exact: true }).fill("=1");
@@ -210,7 +210,7 @@ test("filters start as icons, keep predicates when closed, clear explicitly, and
     page.locator(".cm-content"),
     '[{"score":2},{"score":1}]',
   );
-  const view = page.locator(".view-pane");
+  const view = page.getByRole("tabpanel");
   await expect(view.locator("thead input")).toHaveCount(0);
   await view.getByRole("button", { name: "筛选 score", exact: true }).click();
   await view

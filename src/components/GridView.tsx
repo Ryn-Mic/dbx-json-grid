@@ -187,11 +187,11 @@ function NestedGrid(
     });
   }, [pathKey(selected), query, pageSize]);
   useEffect(() => {
-    if (query)
+    if (query && props.active !== false)
       root.current
         ?.querySelector('[data-selected="true"]')
         ?.scrollIntoView?.({ block: "nearest" });
-  }, [pathKey(selected), query, currentPage]);
+  }, [pathKey(selected), query, currentPage, props.active]);
 
   const indexWidth = widths.index ?? (indexed ? 48 : 140);
   const columnWidths = model.columns.map((column) => {

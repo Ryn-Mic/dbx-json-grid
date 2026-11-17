@@ -13,3 +13,4 @@
 .cm-line.cm-json-selected{background:color-mix(in srgb,var(--jg-accent) 15%,var(--jg-panel))!important;box-shadow:inset 3px 0 var(--jg-accent)}
 .resize-handle{touch-action:none;user-select:none}
 @media(max-width:640px){.workbench.layout-split{grid-template-rows:minmax(80px,var(--split)) 7px minmax(0,1fr)}}
+.view-tabpanel{height:100%;min-height:0;min-width:0}.view-tabpanel[hidden]{display:none}
