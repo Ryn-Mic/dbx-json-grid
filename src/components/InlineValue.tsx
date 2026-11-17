@@ -1,20 +1,24 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { parseJson, stringifyJson, typeOf, type JsonValue } from "../core/json";
 import { viewLabels, viewSummary } from "./viewLabels";
 import type { ViewProps } from "./types";
 export function Highlight({ text, query }: { text: string; query: string }) {
-  const index = query
-    ? text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase())
-    : -1;
-  return index < 0 ? (
-    <>{text}</>
-  ) : (
-    <>
-      {text.slice(0, index)}
-      <mark>{text.slice(index, index + query.length)}</mark>
-      {text.slice(index + query.length)}
-    </>
+  if (!query) return <>{text}</>;
+  // Escape the user's literal query; regexp positions refer to the original text.
+  const pattern = new RegExp(
+    query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+    "giu",
   );
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  for (const match of text.matchAll(pattern)) {
+    const index = match.index;
+    parts.push(text.slice(cursor, index));
+    parts.push(<mark key={index}>{match[0]}</mark>);
+    cursor = index + match[0].length;
+  }
+  parts.push(text.slice(cursor));
+  return <>{parts}</>;
 }
 export function InlineValue({
   value,

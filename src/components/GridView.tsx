@@ -56,7 +56,7 @@ function NestedGrid(
           ? props.expansion
           : props.expansion === "none"
             ? 0
-            : 2;
+            : 1;
     if (depth < max)
       for (const row of model.rows.slice(0, 50))
         for (const cell of row.cells)

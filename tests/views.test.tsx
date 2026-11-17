@@ -7,6 +7,8 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TreeView } from "../src/components/TreeView";
+import { SAMPLE } from "../src/sample";
+import { Highlight } from "../src/components/InlineValue";
 import { GridView } from "../src/components/GridView";
 import { parseJson, stringifyJson } from "../src/core/json";
 import type { ViewProps } from "../src/components/types";
@@ -216,5 +218,31 @@ describe("editable JSON views", () => {
       "1 行、129 个字段超出表格显示上限",
     );
     expect(screen.getByRole("button", { name: "展开表格" })).toBeTruthy();
+  });
+  it("keeps sample order rows visible while nesting stays collapsed by default", () => {
+    render(<GridView {...props(SAMPLE)} />);
+    for (const name of ['"Alice Chen"', '"Noah Park"', '"Mia Wilson"'])
+      expect(screen.getByText(name)).toBeTruthy();
+    expect(
+      screen.getAllByRole("button", { name: "Expand items" }),
+    ).toHaveLength(3);
+    expect(
+      screen.getAllByRole("button", { name: "Expand shipping" }),
+    ).toHaveLength(3);
+    expect(screen.queryByText('"Mechanical keyboard"')).toBeNull();
+    fireEvent.click(screen.getAllByRole("button", { name: "Expand items" })[0]);
+    expect(screen.getByText('"Mechanical keyboard"')).toBeTruthy();
+  });
+  it("highlights every case-insensitive literal occurrence without HTML injection", () => {
+    const text = "<img src=x> A.* a.* A.*";
+    const { container, rerender } = render(
+      <Highlight text={text} query="a.*" />,
+    );
+    expect(container.querySelectorAll("mark")).toHaveLength(3);
+    expect(container.textContent).toBe(text);
+    expect(container.querySelector("img")).toBeNull();
+    rerender(<Highlight text="😀 hi 😀 HI" query="hi" />);
+    expect(container.querySelectorAll("mark")).toHaveLength(2);
+    expect(container.textContent).toBe("😀 hi 😀 HI");
   });
 });
