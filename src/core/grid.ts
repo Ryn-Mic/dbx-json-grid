@@ -7,13 +7,15 @@ export interface GridModel { columns: string[]; rows: GridRow[] }
 export function gridModel(value: JsonValue, path: JsonPath): GridModel {
   const target = getAt(value,path), kind = typeOf(target);
   const entries = kind === 'array' || kind === 'object' ? childrenOf(value,path) : [{key:'value',path:[...path],value:target}];
+  const objectArray = kind === 'array' && entries.length > 0 && entries.every(entry => typeOf(entry.value) === 'object');
   const columns: string[] = [];
-  for (const entry of entries) {
-    const keys = kind === 'array' && typeOf(entry.value) === 'object' ? Object.keys(entry.value as object) : ['value'];
-    for (const key of keys) if (!columns.includes(key)) columns.push(key);
+  if (objectArray) {
+    for (const entry of entries) for (const key of Object.keys(entry.value as object)) if (!columns.includes(key)) columns.push(key);
   }
+  const fallback = columns.length === 0;
+  if (fallback) columns.push('value');
   const rows: GridRow[] = entries.map(entry => {
-    const objectRow = kind === 'array' && typeOf(entry.value) === 'object';
+    const objectRow = objectArray && !fallback;
     return {...entry, cells: columns.map(key => {
       const exists = objectRow ? Object.prototype.hasOwnProperty.call(entry.value,key) : key === 'value';
       return {key,path:objectRow ? [...entry.path,key] : [...entry.path],value:exists ? objectRow ? (entry.value as Record<string,JsonValue>)[key] : entry.value : undefined,missing:!exists};

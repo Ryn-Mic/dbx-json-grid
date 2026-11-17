@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseJson, stringifyJson, typeOf, getAt, setAt, removeAt, insertAt, renameAt, childrenOf, formatPath, pathKey, findMatches, MAX_INPUT_BYTES, MAX_DEPTH } from '../src/core/json';
+import { parseJson, stringifyJson, typeOf, getAt, setAt, removeAt, insertAt, renameAt, childrenOf, formatPath, pathKey, findMatches, summary, MAX_INPUT_BYTES, MAX_DEPTH } from '../src/core/json';
 
 describe('lossless JSON contract', () => {
   it('retains numeric lexemes and primitive types', () => {
@@ -41,6 +41,8 @@ describe('lossless JSON contract', () => {
     expect(stringifyJson(insertAt(value, ['b'], '__proto__', true))).toBe('{"a":[1],"b":{"__proto__":true}}');
   });
   it('describes empty structures, paths and searches', () => {
+    expect(summary(parseJson('{"x":[1]}'))).toBe('{1 keys}');
+    expect(summary(parseJson('[{},{}]'))).toBe('[2 items]');
     expect(childrenOf(parseJson('{}'), [])).toEqual([]);
     expect(childrenOf(parseJson('[null]'), [])).toEqual([{key:0,path:[0],value:null}]);
     expect(formatPath(['a.b', 0, 'x"'])).toBe('$["a.b"][0]["x\\\""]');

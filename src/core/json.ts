@@ -128,6 +128,12 @@ export function childrenOf(value: JsonValue, path: JsonPath): {key: string | num
   });
 }
 export function preview(value: JsonValue): string { return stringifyJson(value); }
+/** Shallow display text: never serializes container descendants. */
+export function summary(value: JsonValue): string {
+  if (Array.isArray(value)) return `[${value.length} items]`;
+  if (container(value)) return `{${Object.keys(value).length} keys}`;
+  return preview(value);
+}
 export function findMatches(value: JsonValue, query: string): JsonPath[] {
   validate(value);
   if (!query) return [];
