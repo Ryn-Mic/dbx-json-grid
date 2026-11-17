@@ -13,7 +13,7 @@
   ],
   "engines": {
     "dbx": ">=0.5.68",
-    "host_api": "^1.3"
+    "host_api": "1"
   },
   "entrypoints": {
     "ui": {

@@ -1,0 +1,31 @@
+const en = {
+  open: 'Open file', save: 'Export JSON', paste: 'Paste', format: 'Format', minify: 'Minify', undo: 'Undo', redo: 'Redo',
+  source: 'Source', grid: 'Grid', tree: 'Tree', search: 'Search keys and values…', filter: 'Filter matches', expand: 'Expand all', collapse: 'Collapse all',
+  copyPath: 'Copy JSONPath', copyValue: 'Copy JSON', copyKey: 'Copy key', edit: 'Edit value', add: 'Add child', rename: 'Rename key', delete: 'Delete node',
+  sample: 'Load example', clear: 'Clear document', valid: 'Valid JSON', empty: 'Paste JSON or open a file to start', invalid: 'Fix the JSON source to continue',
+  local: 'Local processing', path: 'Selected path', type: 'Type', draft: 'Remember draft', draftInfo: 'Keeps at most two small drafts (96 KiB each). Export larger files.',
+  draftSaved: 'Draft saved', draftLarge: 'Draft too large — export to keep it', draftError: 'Draft was not saved', draftOff: 'Session only',
+  fromString: 'Parse JSON string', toString: 'Encode as JSON string', tools: 'JSON tools', focusSource: 'Maximize source', focusView: 'Maximize view', split: 'Split view',
+  cancel: 'Cancel', apply: 'Apply change', key: 'Key', index: 'Insert at index', value: 'Value', copied: 'Copied', exported: 'Exported',
+  removeWarning: 'Delete this node and its contents? You can undo this change.',
+  close: 'Close', previous: 'Previous match', next: 'Next match', noMatches: 'No matches', matches: 'matches', depth: 'Expand depth', loading: 'Opening workbench…',
+  root: 'Root', selection: 'Selected node', untitled: 'untitled.json', onlyJSON: 'Choose a JSON text file up to 10 MiB.',
+  help: 'Double-click a value to edit. Right-click for node actions.', clearDraft: 'Clear saved draft', fontSize: 'Editor font size', exportNode: 'Export selected node',
+  changes: 'Changes sync across source, grid and tree.', theme: 'Switch theme', language: 'Switch language', schema: 'Structure', lines: 'lines',
+};
+const zh: typeof en = {
+  open: '打开文件', save: '导出 JSON', paste: '粘贴', format: '格式化', minify: '压缩', undo: '撤销', redo: '重做',
+  source: '源码', grid: '网格', tree: '树形', search: '搜索键和值…', filter: '只显示匹配项', expand: '全部展开', collapse: '全部折叠',
+  copyPath: '复制 JSONPath', copyValue: '复制 JSON', copyKey: '复制键名', edit: '编辑值', add: '添加子节点', rename: '重命名键', delete: '删除节点',
+  sample: '加载示例', clear: '清空文档', valid: 'JSON 有效', empty: '粘贴 JSON 或打开文件，开始查看', invalid: '请先修复左侧 JSON 源码',
+  local: '本地处理', path: '选中路径', type: '类型', draft: '记住草稿', draftInfo: '最多保留两份小草稿，每份不超过 96 KiB。较大文件请导出。',
+  draftSaved: '草稿已保存', draftLarge: '草稿过大，请导出保存', draftError: '草稿未保存', draftOff: '仅当前会话',
+  fromString: '解析 JSON 字符串', toString: '转为 JSON 字符串', tools: 'JSON 工具', focusSource: '最大化源码', focusView: '最大化视图', split: '分栏视图',
+  cancel: '取消', apply: '应用修改', key: '键名', index: '插入位置', value: '值', copied: '已复制', exported: '已导出',
+  removeWarning: '删除此节点及其内容？删除后可以撤销。',
+  close: '关闭', previous: '上一个匹配', next: '下一个匹配', noMatches: '无匹配项', matches: '个匹配', depth: '展开深度', loading: '正在打开工作台…',
+  root: '根节点', selection: '当前节点', untitled: '未命名.json', onlyJSON: '请选择不超过 10 MiB 的 JSON 文本文件。',
+  help: '双击值编辑，右键打开节点菜单。', clearDraft: '清除已存草稿', fontSize: '编辑器字号', exportNode: '导出选中节点',
+  changes: '源码、网格与树形共享修改。', theme: '切换主题', language: '切换语言', schema: '结构', lines: '行',
+};
+export function labels(locale: 'en' | 'zh-CN') { return locale === 'zh-CN' ? zh : en; }
