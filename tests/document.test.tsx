@@ -3,6 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { getAt, parseJson, setAt, stringifyJson } from '../src/core/json';
 import { historyReducer, useDocument } from '../src/useDocument';
 describe('shared document history', () => {
+  it('clears previous document and all undo states when a different workbench takes over', () => {
+    const { result } = renderHook(() => useDocument('{"private":"one"}'));
+    act(() => result.current.edit('{"private":"edited"}'));
+    act(() => result.current.reset(''));
+    expect(result.current.text).toBe(''); expect(result.current.canUndo).toBe(false); expect(result.current.canRedo).toBe(false);
+    act(() => result.current.undo()); expect(result.current.text).toBe('');
+  });
   it('preserves exact integers through a structured edit and shared undo/redo', () => {
     const initial = '{"id":9007199254740993,"name":"A"}';
     const { result } = renderHook(() => useDocument(initial));

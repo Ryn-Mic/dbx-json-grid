@@ -64,10 +64,12 @@ describe('DBX bridge', () => {
     const { bridge, sdk, values } = host();
     expect(await saveDraft(bridge, '\\'.repeat(95 * 1024), 'a.json')).toBe(true);
     sdk.context = { workbenchId: 'two' };
-    expect(await saveDraft(bridge, '\\'.repeat(95 * 1024), 'b.json')).toBe(true);
+    const second = new Bridge(sdk);
+    expect(bridge.instanceId).toBe('one');
+    expect(await saveDraft(second, '\\'.repeat(95 * 1024), 'b.json')).toBe(true);
     expect(byteSize(JSON.stringify(values.get('drafts.v1')))).toBeLessThan(256 * 1024);
-    expect((await readDraft(bridge))?.name).toBe('b.json');
-    sdk.context = { workbenchId: 'three' }; expect(await readDraft(bridge)).toBeNull();
+    expect((await readDraft(second))?.name).toBe('b.json');
+    sdk.context = { workbenchId: 'three' }; expect(await readDraft(new Bridge(sdk))).toBeNull();
   });
   it('removes a stale small draft when current input exceeds draft capacity', async () => {
     const { bridge } = host(); await saveDraft(bridge, '{}', 'a.json');

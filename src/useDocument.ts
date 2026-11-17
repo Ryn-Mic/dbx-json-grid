@@ -2,7 +2,7 @@ import { useMemo, useReducer } from 'react';
 import { parseJson, stringifyJson, type JsonValue } from './core/json';
 
 interface History { past: string[]; text: string; future: string[]; lastTyping: number }
-type Action = { type: 'edit'; text: string; typing: boolean; now: number } | { type: 'undo' | 'redo' };
+type Action = { type: 'edit'; text: string; typing: boolean; now: number } | { type: 'undo' | 'redo' } | { type: 'reset'; text: string };
 const budget = 20 * 1024 * 1024;
 function trim(items: string[], current: string) {
   let size = current.length * 2;
@@ -15,6 +15,7 @@ function trim(items: string[], current: string) {
   return kept;
 }
 export function historyReducer(state: History, action: Action): History {
+  if (action.type === 'reset') return { past: [], text: action.text, future: [], lastTyping: 0 };
   if (action.type === 'edit') {
     if (action.text === state.text) return state;
     const coalesce = action.typing && state.lastTyping > 0 && action.now - state.lastTyping < 600 && !state.future.length;
@@ -40,6 +41,7 @@ export function useDocument(initial: string) {
   return {
     ...parsed, text: history.text, canUndo: !!history.past.length, canRedo: !!history.future.length,
     edit: (text: string, typing = false) => dispatch({ type: 'edit', text, typing, now: Date.now() }),
+    reset: (text: string) => dispatch({ type: 'reset', text }),
     apply: (fn: (value: JsonValue) => JsonValue) => {
       if (parsed.value === undefined) throw new Error('Fix the JSON source before editing.');
       dispatch({ type: 'edit', text: stringifyJson(fn(parsed.value), 2), typing: false, now: Date.now() });

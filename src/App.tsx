@@ -55,6 +55,7 @@ export function App() {
   const workbench = useRef<HTMLDivElement>(null);
   const editorRef = useRef<EditorView | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const pendingContext = useRef<{ id: string; newQuery: boolean } | null>(null);
   const t = labels(locale);
   const notify = useCallback((message: string) => {
     setToast(message); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(''), 5000);
@@ -92,17 +93,41 @@ export function App() {
     return () => window.removeEventListener('dbx-plugin-env', update);
   }, [bridge]);
   useEffect(() => {
+    if (!bridge?.host?.onContext) return;
+    return bridge.host.onContext(context => {
+      const id = String(context.workbenchId ?? bridge.instanceId);
+      if (id === bridge.instanceId) return; // Ordinary invocation updates preserve this instance's edits.
+      pendingContext.current = { id, newQuery: context.newQuery === true };
+      setBusy(true); setModal(null); doc.reset(''); setName(t.untitled); resetLocation();
+      setBridge(new Bridge(bridge.host, id));
+    });
+  }, [bridge]);
+  useEffect(() => {
+    const pending = pendingContext.current;
+    if (!bridge || !pending || pending.id !== bridge.instanceId) return;
+    pendingContext.current = null;
+    let live = true;
+    void (async () => {
+      const saved = draftEnabled && !pending.newQuery ? await readDraft(bridge) : null;
+      if (!live) return;
+      if (saved) { doc.reset(saved.text); setName(saved.name); }
+      setBusy(false);
+    })().catch(cause => { if (live) { error(cause); setBusy(false); } });
+    return () => { live = false; };
+  }, [bridge]);
+  useEffect(() => {
     if (!bridge?.canStore) return;
     const timer = setTimeout(() => { void bridge.putState('preferences.v1', { split, draft: draftEnabled, fontSize }).catch(error); }, 300);
     return () => clearTimeout(timer);
   }, [bridge, split, draftEnabled, fontSize, error]);
   useEffect(() => {
     if (!bridge || !draftEnabled) { setDraftStatus('draftOff'); return; }
+    if (busy) return;
     const timer = setTimeout(() => {
       void saveDraft(bridge, doc.text, name).then(ok => setDraftStatus(ok ? 'draftSaved' : 'draftLarge'), () => setDraftStatus('draftError'));
     }, 800);
     return () => clearTimeout(timer);
-  }, [bridge, draftEnabled, doc.text, name]);
+  }, [bridge, draftEnabled, doc.text, name, busy]);
   useEffect(() => bridge?.onDrop(load, error), [bridge, error]);
   useEffect(() => {
     if (!dragging) return;
@@ -270,7 +295,7 @@ export function App() {
         <div className="pane-header"><div className="pane-title"><Braces size={14} />{t.source}<span className="source-label">JSON</span></div>
           <div className="pane-actions"><button className="subtle-button" disabled={!structured} onClick={() => run(() => doc.edit(stringifyJson(value!, 2)))}>{t.format}</button><button className="subtle-button" disabled={!structured} onClick={() => run(() => doc.edit(stringifyJson(value!)))}>{t.minify}</button><IconButton label={layout === 'source' ? t.split : t.focusSource} onClick={() => setLayout(layout === 'source' ? 'split' : 'source')}>{layout === 'source' ? <Minimize2 size={13} /> : <Maximize2 size={13} />}</IconButton></div>
         </div>
-        <div className="editor-wrap"><CodeMirror value={doc.text} height="100%" theme={appearance} extensions={editorExtensions} basicSetup={{ history: false, foldGutter: true, highlightActiveLine: true, autocompletion: false }} onChange={text => doc.edit(text, true)} onCreateEditor={view => { editorRef.current = view; }} aria-label={t.source} /></div>
+        <div className="editor-wrap"><CodeMirror value={doc.text} readOnly={busy} height="100%" theme={appearance} extensions={editorExtensions} basicSetup={{ history: false, foldGutter: true, highlightActiveLine: true, autocompletion: false }} onChange={text => doc.edit(text, true)} onCreateEditor={view => { editorRef.current = view; }} aria-label={t.source} /></div>
         <div className={`source-status ${doc.error ? 'invalid' : ''}`}><span>{doc.error ? <X size={12} /> : <Check size={12} />}{doc.error ? t.invalid : structured ? t.valid : 'JSON'}</span><span>{doc.text.split('\n').length} {t.lines}</span></div>
         {doc.error && <div className="parse-error" role="alert">{doc.error}</div>}
       </section>

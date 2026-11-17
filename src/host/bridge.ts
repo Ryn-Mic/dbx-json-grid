@@ -28,7 +28,8 @@ const encoder = new TextEncoder();
 export const byteSize = (text: string) => encoder.encode(text).byteLength;
 
 export class Bridge {
-  constructor(readonly host?: HostPlugin) {}
+  readonly instanceId: string;
+  constructor(readonly host?: HostPlugin, instanceId?: string) { this.instanceId = instanceId ?? String(host?.context?.workbenchId ?? 'preview'); }
   get embedded() { return !!this.host; }
   get locale(): Locale { return this.host?.locale?.startsWith('zh') ? 'zh-CN' : this.host ? 'en' : 'zh-CN'; }
   get appearance(): Appearance { return this.host?.theme?.appearance ?? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); }
@@ -38,7 +39,6 @@ export class Bridge {
   get canStore() { return this.host ? !!(this.host.capabilities?.storage && this.host.storage) : true; }
   get canOpenNative() { const c = this.host?.capabilities?.fileTransfer; return !!(c?.pick && c.read && this.host?.fileTransfer); }
   get canSave() { return this.host ? !!(this.host.capabilities?.fileTransfer?.beginSave && this.host.fileTransfer) : true; }
-  get instanceId() { return String(this.host?.context?.workbenchId ?? 'preview'); }
   async copy(text: string) {
     if (!this.canCopy) throw new Error('Clipboard writing is unavailable.');
     if (this.host) await this.host.copy(text); else await navigator.clipboard.writeText(text);
