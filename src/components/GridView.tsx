@@ -12,6 +12,7 @@ import { InlineValue, Highlight } from "./InlineValue";
 import { NodeMenu } from "./NodeMenu";
 import type { ViewProps } from "./types";
 import "./views.css";
+import { viewLabels } from "./viewLabels";
 export function GridView(props: ViewProps) {
   const searchMatches = useMemo(
     () => findMatches(props.value, props.query),
@@ -35,6 +36,7 @@ function NestedGrid(
     searchMatches: JsonPath[];
   },
 ) {
+  const t = viewLabels(props.locale);
   const { value, path, depth, selected, query, filter } = props,
     model = useMemo(() => gridModel(value, path), [value, pathKey(path)]),
     [sort, setSort] = useState<{ key: string; direction: number } | null>(null),
@@ -163,17 +165,17 @@ function NestedGrid(
     >
       <div className="jg-grid-caption">
         <button
-          aria-label={collapsed ? "Expand grid" : "Collapse grid"}
+          aria-label={collapsed ? t.expandGrid : t.collapseGrid}
           onClick={() => setCollapsed(!collapsed)}
         >
           {collapsed ? "▸" : "▾"}
         </button>
-        <span>{depth === 0 ? "JSON data" : String(path.at(-1))}</span>
-        <span className="jg-muted">{model.rows.length} rows</span>
+        <span>{depth === 0 ? t.jsonData : String(path.at(-1))}</span>
+        <span className="jg-muted">{t.rows(model.rows.length)}</span>
       </div>
       {model.notice && (
         <div className="jg-grid-notice" role="status">
-          {model.notice}
+          {t.wide(model.columnCount, model.rows.length)}
         </div>
       )}
       {!collapsed && (
@@ -182,7 +184,7 @@ function NestedGrid(
             <table className="jg-table">
               <thead>
                 <tr>
-                  <th className="jg-index">Key / index</th>
+                  <th className="jg-index">{t.index}</th>
                   {model.columns.map((column) => (
                     <th
                       key={column}
@@ -193,7 +195,7 @@ function NestedGrid(
                     >
                       <button
                         className="jg-sort"
-                        aria-label={`Sort ${column}`}
+                        aria-label={`${t.sort} ${column}`}
                         onClick={() => {
                           setSort({
                             key: column,
@@ -212,7 +214,7 @@ function NestedGrid(
                       </button>
                       <span
                         role="separator"
-                        aria-label={`Resize ${column}`}
+                        aria-label={`${t.resize} ${column}`}
                         aria-orientation="vertical"
                         tabIndex={0}
                         className="jg-resize"
@@ -248,8 +250,8 @@ function NestedGrid(
                         }}
                       />
                       <input
-                        aria-label={`Filter ${column}`}
-                        placeholder="Filter · =, >, <"
+                        aria-label={`${t.filter} ${column}`}
+                        placeholder={t.filterHint}
                         value={filters[column] || ""}
                         onChange={(e) => {
                           setFilters({ ...filters, [column]: e.target.value });
@@ -265,6 +267,7 @@ function NestedGrid(
                   <tr key={pathKey(row.path)}>
                     <th className="jg-row-key">
                       <NodeMenu
+                        locale={props.locale}
                         path={row.path}
                         value={row.value}
                         disabled={props.disabled}
@@ -301,10 +304,11 @@ function NestedGrid(
                               disabled={props.disabled}
                               onClick={() => props.onAction("add", row.path)}
                             >
-                              missing · add
+                              {t.missing}
                             </button>
                           ) : (
                             <NodeMenu
+                              locale={props.locale}
                               path={cell.path}
                               value={cell.value!}
                               disabled={props.disabled}
@@ -314,7 +318,7 @@ function NestedGrid(
                                 {branch && !same && (
                                   <button
                                     className="jg-expander"
-                                    aria-label={`${isOpen ? "Collapse" : "Expand"} ${cell.key}`}
+                                    aria-label={`${isOpen ? t.collapse : t.expand} ${cell.key}`}
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setExpanded((old) => {
@@ -329,6 +333,7 @@ function NestedGrid(
                                   </button>
                                 )}
                                 <InlineValue
+                                  locale={props.locale}
                                   value={cell.value!}
                                   query={query}
                                   disabled={props.disabled}
@@ -339,7 +344,7 @@ function NestedGrid(
                                 />
                                 <button
                                   className="jg-edit"
-                                  aria-label={`Edit ${cell.key}`}
+                                  aria-label={`${t.edit} ${cell.key}`}
                                   disabled={props.disabled}
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -363,7 +368,7 @@ function NestedGrid(
                                       props.onAction("focus", cell.path)
                                     }
                                   >
-                                    Visible row limit reached · focus subtree
+                                    {t.gridLimit}
                                   </button>
                                 ))}
                             </NodeMenu>
@@ -379,14 +384,14 @@ function NestedGrid(
           {rows.length === 0 && (
             <div className="jg-empty">
               {query || Object.values(filters).some(Boolean)
-                ? "No matching rows"
-                : "Empty container"}
+                ? t.noRows
+                : t.empty}
             </div>
           )}
           <div className="jg-pagination">
-            <span>{rows.length} rows</span>
+            <span>{t.rows(rows.length)}</span>
             <button
-              aria-label="Previous page"
+              aria-label={t.previous}
               disabled={currentPage === 0}
               onClick={() => setPage(currentPage - 1)}
             >
@@ -397,7 +402,7 @@ function NestedGrid(
               {Math.max(1, Math.ceil(rows.length / pageSize))}
             </span>
             <button
-              aria-label="Next page"
+              aria-label={t.next}
               disabled={(currentPage + 1) * pageSize >= rows.length}
               onClick={() => setPage(currentPage + 1)}
             >

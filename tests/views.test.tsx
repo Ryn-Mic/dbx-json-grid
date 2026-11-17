@@ -156,4 +156,65 @@ describe("editable JSON views", () => {
       .closest("td");
     expect(selectedCell?.dataset.selected).toBe("true");
   });
+  it("localizes tree menus and keyboard inline errors in Chinese", () => {
+    const p = props('{"count":1}', { locale: "zh-CN" });
+    render(<TreeView {...p} />);
+    const value = screen.getByText("1", { selector: ".jg-value" });
+    fireEvent.keyDown(value, { key: "F2" });
+    const editor = screen.getByRole("textbox", { name: "编辑值" });
+    fireEvent.change(editor, { target: { value: "true" } });
+    fireEvent.keyDown(editor, { key: "Enter" });
+    expect(screen.getByRole("alert")).toHaveTextContent("请保持当前类型");
+    fireEvent.change(editor, { target: { value: "invalid" } });
+    fireEvent.keyDown(editor, { key: "Enter" });
+    expect(screen.getByRole("alert")).toHaveTextContent("JSON 值无效");
+    fireEvent.keyDown(editor, { key: "Escape" });
+    fireEvent.contextMenu(screen.getByText("1", { selector: ".jg-value" }));
+    expect(screen.getByRole("menuitem", { name: "复制路径" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "复制键名" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("menuitem", { name: "重命名" }));
+    expect(p.onAction).toHaveBeenCalledWith("rename", ["count"]);
+    fireEvent.keyDown(screen.getByText("1", { selector: ".jg-value" }), {
+      key: "Enter",
+    });
+    expect(screen.getByRole("textbox", { name: "编辑值" })).toBeTruthy();
+    expect(p.onEdit).not.toHaveBeenCalled();
+  });
+  it("localizes grid filtering and pagination without translating JSON keys or types", () => {
+    const p = props(
+      JSON.stringify(
+        Array.from({ length: 51 }, (_, index) => ({ score: index })),
+      ),
+      { locale: "zh-CN" },
+    );
+    render(<GridView {...p} />);
+    expect(screen.getByText("键名 / 索引")).toBeTruthy();
+    expect(screen.getAllByText("object").length).toBe(50);
+    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+    expect(screen.getByText("50", { selector: ".jg-value" })).toBeTruthy();
+    fireEvent.change(screen.getByRole("textbox", { name: "筛选 score" }), {
+      target: { value: ">49" },
+    });
+    expect(screen.getByText("1 行")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "上一页" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "下一页" })).toBeDisabled();
+    fireEvent.change(screen.getByRole("textbox", { name: "筛选 score" }), {
+      target: { value: ">100" },
+    });
+    expect(screen.getByText("没有匹配的行")).toBeTruthy();
+  });
+  it("localizes wide-grid fallback explanations", () => {
+    const source = JSON.stringify([
+      Object.fromEntries(
+        Array.from({ length: 129 }, (_, index) => [`field${index}`, index]),
+      ),
+    ]);
+    render(
+      <GridView {...props(source, { locale: "zh-CN", expansion: "none" })} />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "1 行、129 个字段超出表格显示上限",
+    );
+    expect(screen.getByRole("button", { name: "展开表格" })).toBeTruthy();
+  });
 });

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { typeOf, type JsonPath, type JsonValue } from "../core/json";
+import { viewLabels } from "./viewLabels";
+import type { ViewProps } from "./types";
 import type { NodeAction } from "./types";
 export function NodeMenu({
   path,
@@ -7,7 +9,9 @@ export function NodeMenu({
   disabled,
   onAction,
   children,
+  locale,
 }: {
+  locale: ViewProps["locale"];
   path: JsonPath;
   value: JsonValue;
   disabled: boolean;
@@ -25,18 +29,19 @@ export function NodeMenu({
     document.addEventListener("pointerdown", close);
     return () => document.removeEventListener("pointerdown", close);
   }, [point]);
+  const t = viewLabels(locale);
   const actions: [NodeAction, string][] = [
-    ["copy-path", "Copy path"],
-    ["copy-key", "Copy key"],
-    ["copy-value", "Copy value"],
-    ["focus", "Focus here"],
+    ["copy-path", t.copyPath],
+    ["copy-key", t.copyKey],
+    ["copy-value", t.copyValue],
+    ["focus", t.focus],
   ];
   if (!disabled) {
     if (["array", "object"].includes(typeOf(value)))
-      actions.push(["add", "Add child"]);
+      actions.push(["add", t.add]);
     if (path.length) {
-      if (typeof path.at(-1) === "string") actions.push(["rename", "Rename"]);
-      actions.push(["delete", "Delete"]);
+      if (typeof path.at(-1) === "string") actions.push(["rename", t.rename]);
+      actions.push(["delete", t.delete]);
     }
   }
   return (

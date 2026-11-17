@@ -12,9 +12,11 @@ import { InlineValue, Highlight } from "./InlineValue";
 import { NodeMenu } from "./NodeMenu";
 import type { ViewProps } from "./types";
 import "./views.css";
+import { viewLabels } from "./viewLabels";
 const isBranch = (value: JsonValue) =>
   ["array", "object"].includes(typeOf(value));
 export function TreeView(props: ViewProps) {
+  const t = viewLabels(props.locale);
   const { value, path, selected, query, filter } = props,
     [open, setOpen] = useState(new Set<string>()),
     [scroll, setScroll] = useState(0),
@@ -107,7 +109,7 @@ export function TreeView(props: ViewProps) {
     <div className="jg-tree-wrap">
       <div
         role="tree"
-        aria-label="JSON tree"
+        aria-label={t.tree}
         className="jg-tree"
         ref={viewport}
         onScroll={(e) => setScroll(e.currentTarget.scrollTop)}
@@ -165,6 +167,7 @@ export function TreeView(props: ViewProps) {
               }}
             >
               <NodeMenu
+                locale={props.locale}
                 path={row.path}
                 value={row.value}
                 disabled={props.disabled}
@@ -185,7 +188,7 @@ export function TreeView(props: ViewProps) {
                 >
                   <button
                     className="jg-expander"
-                    aria-label={`${open.has(pathKey(row.path)) ? "Collapse" : "Expand"} ${String(row.path.at(-1) ?? "root")}`}
+                    aria-label={`${open.has(pathKey(row.path)) ? t.collapse : t.expand} ${String(row.path.at(-1) ?? t.root)}`}
                     disabled={!isBranch(row.value)}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -206,6 +209,7 @@ export function TreeView(props: ViewProps) {
                   </span>
                   <span className="jg-colon">:</span>
                   <InlineValue
+                    locale={props.locale}
                     value={row.value}
                     query={query}
                     disabled={props.disabled}
@@ -220,10 +224,10 @@ export function TreeView(props: ViewProps) {
       </div>
       {capped && (
         <div role="status" className="jg-limit">
-          Showing the first 5,000 nodes. Collapse branches or focus a subtree.
+          {t.treeLimit}
         </div>
       )}
-      {rows.length === 0 && <div className="jg-empty">No matching nodes</div>}
+      {rows.length === 0 && <div className="jg-empty">{t.noNodes}</div>}
     </div>
   );
 }

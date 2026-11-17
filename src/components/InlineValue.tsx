@@ -1,11 +1,7 @@
 import { useState } from "react";
-import {
-  parseJson,
-  stringifyJson,
-  summary,
-  typeOf,
-  type JsonValue,
-} from "../core/json";
+import { parseJson, stringifyJson, typeOf, type JsonValue } from "../core/json";
+import { viewLabels, viewSummary } from "./viewLabels";
+import type { ViewProps } from "./types";
 export function Highlight({ text, query }: { text: string; query: string }) {
   const index = query
     ? text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase())
@@ -26,7 +22,9 @@ export function InlineValue({
   disabled,
   onCommit,
   onEdit,
+  locale,
 }: {
+  locale: ViewProps["locale"];
   value: JsonValue;
   query: string;
   disabled: boolean;
@@ -36,24 +34,36 @@ export function InlineValue({
   const [editing, setEditing] = useState(false),
     [draft, setDraft] = useState(""),
     [error, setError] = useState("");
+  const t = viewLabels(locale);
   const kind = typeOf(value),
     expandable = kind === "array" || kind === "object";
   function commit() {
     try {
       const next = kind === "string" ? draft : parseJson(draft);
-      if (typeOf(next) !== kind)
-        throw new Error("Keep the current type, or use Edit value");
+      if (typeOf(next) !== kind) {
+        setError(t.keepType);
+        return;
+      }
       onCommit(next);
       setEditing(false);
       setError("");
-    } catch (e) {
-      setError((e as Error).message);
+    } catch {
+      setError(t.invalidJson);
+    }
+  }
+  function startEditing() {
+    if (disabled) return;
+    if (expandable) onEdit();
+    else {
+      setDraft(kind === "string" ? String(value) : stringifyJson(value));
+      setError("");
+      setEditing(true);
     }
   }
   return editing ? (
     <span className="jg-inline-editor">
       <input
-        aria-label="Edit value"
+        aria-label={t.editValue}
         autoFocus
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
@@ -72,18 +82,20 @@ export function InlineValue({
     <span
       className={`jg-value jg-${kind}`}
       tabIndex={disabled ? -1 : 0}
-      title="Double-click to edit"
+      title={t.editHint}
       onDoubleClick={(e) => {
         e.stopPropagation();
-        if (disabled) return;
-        if (expandable) onEdit();
-        else {
-          setDraft(kind === "string" ? String(value) : stringifyJson(value));
-          setEditing(true);
+        startEditing();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === "F2") {
+          e.preventDefault();
+          e.stopPropagation();
+          startEditing();
         }
       }}
     >
-      <Highlight text={summary(value)} query={query} />
+      <Highlight text={viewSummary(value, locale)} query={query} />
     </span>
   );
 }
