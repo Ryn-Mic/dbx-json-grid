@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { parseJson, stringifyJson, typeOf, type JsonValue } from "../core/json";
 import { viewLabels, viewSummary } from "./viewLabels";
 import type { ViewProps } from "./types";
@@ -27,8 +27,10 @@ export function InlineValue({
   onCommit,
   onEdit,
   locale,
+  revision,
 }: {
   locale: ViewProps["locale"];
+  revision: string;
   value: JsonValue;
   query: string;
   disabled: boolean;
@@ -37,11 +39,20 @@ export function InlineValue({
 }) {
   const [editing, setEditing] = useState(false),
     [draft, setDraft] = useState(""),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [editRevision, setEditRevision] = useState(revision);
+  useEffect(() => {
+    setEditing(false);
+    setError("");
+  }, [revision]);
   const t = viewLabels(locale);
   const kind = typeOf(value),
     expandable = kind === "array" || kind === "object";
   function commit() {
+    if (disabled || editRevision !== revision) {
+      setEditing(false);
+      return;
+    }
     try {
       const next = kind === "string" ? draft : parseJson(draft);
       if (typeOf(next) !== kind) {
@@ -59,16 +70,18 @@ export function InlineValue({
     if (disabled) return;
     if (expandable) onEdit();
     else {
+      setEditRevision(revision);
       setDraft(kind === "string" ? String(value) : stringifyJson(value));
       setError("");
       setEditing(true);
     }
   }
-  return editing ? (
+  return editing && editRevision === revision ? (
     <span className="jg-inline-editor">
       <input
         aria-label={t.editValue}
         autoFocus
+        disabled={disabled}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => {

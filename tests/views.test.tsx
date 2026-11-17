@@ -15,6 +15,7 @@ import type { ViewProps } from "../src/components/types";
 afterEach(cleanup);
 function props(source: string, overrides: Partial<ViewProps> = {}): ViewProps {
   return {
+    revision: source,
     value: parseJson(source),
     path: [],
     selected: [],
@@ -115,13 +116,15 @@ describe("editable JSON views", () => {
   });
   it("supports mixed arrays and empty object rows through nested grids", () => {
     const { unmount } = render(<GridView {...props('[1,{"x":2},[]]')} />);
+    expect(screen.queryByText("x")).toBeNull();
+    fireEvent.click(screen.getAllByRole("button", { name: "Expand value" })[0]);
     expect(screen.getByText("x")).toBeTruthy();
     expect(screen.getByText("[0 items]")).toBeTruthy();
     unmount();
     render(<GridView {...props("[{},{}]")} />);
     expect(screen.getAllByText("{0 keys}")).toHaveLength(2);
     expect(
-      screen.getAllByRole("button", { name: "Collapse value" }),
+      screen.getAllByRole("button", { name: "Expand value" }),
     ).toHaveLength(2);
   });
   it("paginates 50 source rows and opens a keyboard accessible context menu", () => {
@@ -244,5 +247,112 @@ describe("editable JSON views", () => {
     rerender(<Highlight text="😀 hi 😀 HI" query="hi" />);
     expect(container.querySelectorAll("mark")).toHaveLength(2);
     expect(container.textContent).toBe("😀 hi 😀 HI");
+  });
+  it("resets grid state when valid source replacement removes the sorted column", () => {
+    const initial = props('[{"a":2},{"a":1}]');
+    const { rerender } = render(<GridView {...initial} />);
+    fireEvent.click(screen.getByRole("button", { name: "Sort a" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Filter a" }), {
+      target: { value: ">0" },
+    });
+    rerender(<GridView {...props('[{"b":2},{"b":1}]')} />);
+    expect(screen.getByRole("button", { name: "Sort b" })).toHaveTextContent(
+      "↕",
+    );
+    expect(screen.getByRole("textbox", { name: "Filter b" })).toHaveValue("");
+    expect(screen.getByText("2", { selector: ".jg-value" })).toBeTruthy();
+    expect(screen.getByText("1", { selector: ".jg-value" })).toBeTruthy();
+  });
+  it("resets filters, width and page when a schema changes with retained columns", () => {
+    const before = JSON.stringify(
+      Array.from({ length: 60 }, (_, a) => ({ a })),
+    );
+    const after = JSON.stringify(
+      Array.from({ length: 60 }, (_, a) => ({ a, b: true })),
+    );
+    const { rerender } = render(<GridView {...props(before)} />);
+    fireEvent.keyDown(screen.getByRole("separator", { name: "Resize a" }), {
+      key: "ArrowRight",
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Filter a" }), {
+      target: { value: ">0" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+    expect(screen.queryByText("0", { selector: ".jg-value" })).toBeNull();
+    rerender(<GridView {...props(after)} />);
+    expect(screen.getByRole("textbox", { name: "Filter a" })).toHaveValue("");
+    expect(
+      screen.getByRole("separator", { name: "Resize a" }).closest("th"),
+    ).toHaveStyle({ width: "180px" });
+    expect(
+      screen.getByRole("button", { name: "Previous page" }),
+    ).toBeDisabled();
+    expect(screen.getByText("0", { selector: ".jg-value" })).toBeTruthy();
+  });
+  it.each([
+    ["grid", GridView],
+    ["tree", TreeView],
+  ] as const)(
+    "cancels %s drafts after a changed valid root source",
+    (_name, View) => {
+      const initial = props('{"a":"old"}');
+      const { rerender } = render(<View {...initial} />);
+      fireEvent.doubleClick(
+        screen.getByText('"old"', { selector: ".jg-value" }),
+      );
+      fireEvent.change(screen.getByRole("textbox", { name: "Edit value" }), {
+        target: { value: "stale" },
+      });
+      rerender(
+        <View {...props('{"a":"oldf"}', { onCommit: initial.onCommit })} />,
+      );
+      expect(screen.queryByRole("textbox", { name: "Edit value" })).toBeNull();
+      expect(
+        screen.getByText('"oldf"', { selector: ".jg-value" }),
+      ).toBeTruthy();
+      expect(initial.onCommit).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    ["grid", GridView],
+    ["tree", TreeView],
+  ] as const)(
+    "cancels %s drafts after an array shift with the same displayed target value",
+    (_name, View) => {
+      const initial = props('["same","tail"]');
+      const { rerender } = render(<View {...initial} />);
+      fireEvent.doubleClick(
+        screen.getByText('"same"', { selector: ".jg-value" }),
+      );
+      fireEvent.change(screen.getByRole("textbox", { name: "Edit value" }), {
+        target: { value: "stale" },
+      });
+      rerender(
+        <View
+          {...props('["same","same","tail"]', { onCommit: initial.onCommit })}
+        />,
+      );
+      expect(screen.queryByRole("textbox", { name: "Edit value" })).toBeNull();
+      expect(
+        screen.getAllByText('"same"', { selector: ".jg-value" }),
+      ).toHaveLength(2);
+      expect(initial.onCommit).not.toHaveBeenCalled();
+    },
+  );
+  it("keeps a focused order array compact by default and honors explicit expand-all", () => {
+    const initial = props(SAMPLE, { path: ["orders"] });
+    const { rerender } = render(<GridView {...initial} />);
+    expect(
+      screen.getAllByRole("button", { name: "Expand items" }),
+    ).toHaveLength(3);
+    expect(
+      screen.getAllByRole("button", { name: "Expand shipping" }),
+    ).toHaveLength(3);
+    expect(screen.queryByText('"Mechanical keyboard"')).toBeNull();
+    for (const name of ['"Alice Chen"', '"Noah Park"', '"Mia Wilson"'])
+      expect(screen.getByText(name)).toBeTruthy();
+    rerender(<GridView {...initial} expansion="all" expansionVersion={1} />);
+    expect(screen.getByText('"Mechanical keyboard"')).toBeTruthy();
+    expect(screen.getByText('"Shanghai"')).toBeTruthy();
   });
 });

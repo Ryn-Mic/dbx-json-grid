@@ -223,7 +223,7 @@ export function App() {
     window.addEventListener('keydown', key, true); return () => window.removeEventListener('keydown', key, true);
   });
   const editorExtensions = useMemo(() => [json(), EditorView.lineWrapping, EditorView.theme({ '&': { fontSize: `${fontSize}px`, backgroundColor: 'transparent' }, '.cm-scroller': { fontFamily: 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace)' }, '.cm-gutters': { backgroundColor: 'transparent', border: 'none', color: 'var(--jg-muted)' }, '.cm-content': { padding: '16px 0' } })], [fontSize]);
-  const viewProps: ViewProps | null = value === undefined ? null : { value, path: safeFocus, selected, onSelect: setSelected, onEdit: requestEdit, onCommit: (path, next) => run(() => doc.apply(current => setAt(current, path, next))), onAction: action, query, filter, expansion, expansionVersion, disabled: !bridge || busy, locale };
+  const viewProps: ViewProps | null = value === undefined ? null : { value, revision: doc.text, path: safeFocus, selected, onSelect: setSelected, onEdit: requestEdit, onCommit: (path, next) => run(() => doc.apply(current => setAt(current, path, next))), onAction: action, query, filter, expansion, expansionVersion, disabled: !bridge || busy, locale };
 
   return <div className={`app ${dragging ? 'resizing' : ''}`}>
     <header className="app-header">

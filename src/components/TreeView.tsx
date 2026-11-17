@@ -209,6 +209,7 @@ export function TreeView(props: ViewProps) {
                   </span>
                   <span className="jg-colon">:</span>
                   <InlineValue
+                    revision={props.revision}
                     locale={props.locale}
                     value={row.value}
                     query={query}

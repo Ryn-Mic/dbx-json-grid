@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { compareValues, gridModel } from "../core/grid";
 import {
   findMatches,
+  getAt,
   parseJson,
   pathKey,
   summary,
@@ -46,6 +47,14 @@ function NestedGrid(
     [widths, setWidths] = useState<Record<string, number>>({}),
     [collapsed, setCollapsed] = useState(props.expansion === "none"),
     root = useRef<HTMLDivElement>(null);
+  const targetKind = typeOf(getAt(value, path));
+  const schemaKey = JSON.stringify([path, model.columns]);
+  useEffect(() => {
+    setSort(null);
+    setFilters({});
+    setWidths({});
+    setPage(0);
+  }, [schemaKey]);
   useEffect(() => {
     setCollapsed(props.expansion === "none");
     const next = new Set<string>();
@@ -56,7 +65,9 @@ function NestedGrid(
           ? props.expansion
           : props.expansion === "none"
             ? 0
-            : 1;
+            : targetKind === "object"
+              ? 1
+              : 0;
     if (depth < max)
       for (const row of model.rows.slice(0, 50))
         for (const cell of row.cells)
@@ -67,7 +78,7 @@ function NestedGrid(
           )
             next.add(pathKey(cell.path));
     setExpanded(next);
-  }, [props.expansionVersion, props.expansion, pathKey(path)]);
+  }, [props.expansionVersion, props.expansion, schemaKey, targetKind]);
   const matches = props.searchMatches;
   let rows = model.rows.filter((row) => {
     if (
@@ -81,7 +92,7 @@ function NestedGrid(
     )
       return false;
     return Object.entries(filters).every(([key, expression]) => {
-      if (!expression) return true;
+      if (!expression || !model.columns.includes(key)) return true;
       const cell = row.cells.find((c) => c.key === key);
       if (!cell || cell.missing) return false;
       const text = summary(cell.value!);
@@ -105,12 +116,14 @@ function NestedGrid(
         : text.toLocaleLowerCase().includes(expression.toLocaleLowerCase());
     });
   });
-  if (sort)
+  if (sort && model.columns.includes(sort.key))
     rows = [...rows].sort((a, b) => {
       const ac = a.cells.find((c) => c.key === sort.key),
         bc = b.cells.find((c) => c.key === sort.key);
-      if (ac?.missing || bc?.missing)
-        return ac?.missing === bc?.missing ? 0 : ac?.missing ? 1 : -1;
+      const aMissing = !ac || ac.missing,
+        bMissing = !bc || bc.missing;
+      if (aMissing || bMissing)
+        return aMissing === bMissing ? 0 : aMissing ? 1 : -1;
       return compareValues(ac!.value!, bc!.value!) * sort.direction;
     });
   const pageSize = Math.max(1, Math.min(50, props.budget));
@@ -333,6 +346,7 @@ function NestedGrid(
                                   </button>
                                 )}
                                 <InlineValue
+                                  revision={props.revision}
                                   locale={props.locale}
                                   value={cell.value!}
                                   query={query}
