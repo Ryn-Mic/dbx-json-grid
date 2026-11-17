@@ -4,8 +4,8 @@
 
 - Node 24.16.0, DBX plugin CLI 0.1.10, macOS arm64.
 - TypeScript strict check and Vite static production build.
-- 55 unit/component tests across lossless JSON, bounded grid projection, original paths, typed edits, virtualization, localization, shared document history and Host bridge.
-- Eighteen real Chromium/Playwright browser flows: source/grid edits and undo/redo; tree search, literal special-key path copy and invalid-source recovery; typed edit dialog, export, locale and 390px layout; official DBX development-host opaque iframe, copy and live theme changes; retained schema/sort and stale-inline-draft regressions; repeated Host context identity isolation and deferred import/error/busy races across identity changes; disabling/clearing drafts during deferred reads/writes.
+- 61 unit/component tests across lossless JSON, bounded grid projection, original paths, typed edits, virtualization, localization, shared document history and Host bridge.
+- Twenty-four real Chromium/Playwright browser flows: source/grid edits and undo/redo; tree search, literal special-key path copy and invalid-source recovery; typed edit dialog, export, locale and 390px layout; official DBX development-host opaque iframe, copy and live theme changes; retained schema/sort and stale-inline-draft regressions; source object block highlighting, duplicate-value mapping, key/column rename collisions and history, actual pointer drags for split/index/data columns (desktop and mobile), icon filters, and nested-grid non-overlap with child resizes; repeated Host context identity isolation and deferred import/error/busy races across identity changes; disabling/clearing drafts during deferred reads/writes.
 - The dev-host iframe uses `sandbox="allow-scripts"`. Plugin parsing and editing run there with no runtime network permission. Browser file input is available as an import fallback.
 - Package contract checks include minimal permissions, version identity, relative local resources, MIT and bundled dependency notices. Official CLI packaging validates the actual manifest and archive.
 
@@ -16,7 +16,7 @@ The published CLI 0.1.10 dev host advertises Host API 1.0.0 and injects a legacy
 The installed native DBX version is 0.6.71-beta.20261115.1. Desktop installation/clipboard/file operations are tracked separately from dev-host verification.
 
 - Input: 10 MiB UTF-8; nesting: 256. Parsing is synchronous and is not a streaming large-file engine.
-- Tree: 5,000 visible flattened rows, virtualized at 28px. Focus a subtree to explore beyond the display limit.
+- Tree: 5,000 visible flattened rows, virtualized at 28px. Collapse branches to explore other nodes beyond the display limit.
 - Grid: up to 50 rows per page; nested row budgets total at most 5,000. At more than 128 columns or 100,000 projected cells, complete row values replace the wide matrix so fields remain accessible.
 - Numeric tokens retain their original lexeme. Sorting uses exact decimal coefficients and BigInt exponents.
 - Duplicate object keys, including escaped equivalent keys, are rejected to prevent silent overwrite.

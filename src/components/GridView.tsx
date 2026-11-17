@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { compareValues, gridModel } from "../core/grid";
 import {
   findMatches,
@@ -8,12 +8,41 @@ import {
   summary,
   typeOf,
   type JsonPath,
+  type JsonValue,
 } from "../core/json";
 import { InlineValue, Highlight } from "./InlineValue";
+import { InlineKey } from "./InlineKey";
+import { ColumnFilter } from "./ColumnFilter";
+import { ResizeHandle } from "./ResizeHandle";
 import { NodeMenu } from "./NodeMenu";
 import type { ViewProps } from "./types";
+import { viewLabels, containerLabel } from "./viewLabels";
 import "./views.css";
-import { viewLabels } from "./viewLabels";
+
+const dataId = (column: string) => `field:${column}`;
+const branch = (value: JsonValue) =>
+  ["array", "object"].includes(typeOf(value));
+function passes(value: JsonValue, expression: string) {
+  const numeric = expression.match(
+    /^(>=|<=|>|<|=)\s*(-?(?:0|[1-9]\d*)(?:\.\d+)?(?:e[+-]?\d+)?)$/i,
+  );
+  if (numeric && typeOf(value) === "number") {
+    const comparison = compareValues(value, parseJson(numeric[2]));
+    return numeric[1] === ">"
+      ? comparison > 0
+      : numeric[1] === "<"
+        ? comparison < 0
+        : numeric[1] === ">="
+          ? comparison >= 0
+          : numeric[1] === "<="
+            ? comparison <= 0
+            : comparison === 0;
+  }
+  const text = summary(value);
+  return expression.startsWith("=")
+    ? text.replace(/^"|"$/g, "") === expression.slice(1)
+    : text.toLocaleLowerCase().includes(expression.toLocaleLowerCase());
+}
 export function GridView(props: ViewProps) {
   const searchMatches = useMemo(
     () => findMatches(props.value, props.query),
@@ -35,28 +64,40 @@ function NestedGrid(
     depth: number;
     budget: number;
     searchMatches: JsonPath[];
+    onWidth?(width: number): void;
   },
 ) {
   const t = viewLabels(props.locale);
-  const { value, path, depth, selected, query, filter } = props,
-    model = useMemo(() => gridModel(value, path), [value, pathKey(path)]),
-    [sort, setSort] = useState<{ key: string; direction: number } | null>(null),
-    [filters, setFilters] = useState<Record<string, string>>({}),
-    [page, setPage] = useState(0),
-    [expanded, setExpanded] = useState(new Set<string>()),
-    [widths, setWidths] = useState<Record<string, number>>({}),
-    [collapsed, setCollapsed] = useState(props.expansion === "none"),
+  const { value, path, depth, selected, query, filter } = props;
+  const model = useMemo(() => gridModel(value, path), [value, pathKey(path)]);
+  const [sort, setSort] = useState<{ key: string; direction: number } | null>(
+    null,
+  );
+  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [page, setPage] = useState(0),
+    [expanded, setExpanded] = useState(new Set<string>());
+  const [widths, setWidths] = useState<Record<string, number>>({}),
+    [childWidths, setChildWidths] = useState<Record<string, number>>({});
+  const [collapsed, setCollapsed] = useState(false),
     root = useRef<HTMLDivElement>(null);
-  const targetKind = typeOf(getAt(value, path));
-  const schemaKey = JSON.stringify([path, model.columns]);
+  const target = getAt(value, path),
+    targetKind = typeOf(target),
+    indexed = targetKind === "array";
+  const columnFields =
+    indexed &&
+    model.rows.some((row) =>
+      row.cells.some((cell) => cell.path.length > row.path.length),
+    );
+  const schemaKey = JSON.stringify([path, model.columns, indexed]);
   useEffect(() => {
     setSort(null);
     setFilters({});
     setWidths({});
     setPage(0);
+    setChildWidths({});
   }, [schemaKey]);
   useEffect(() => {
-    setCollapsed(props.expansion === "none");
+    setCollapsed(depth === 0 && props.expansion === "none");
     const next = new Set<string>();
     const max =
       props.expansion === "all"
@@ -73,83 +114,64 @@ function NestedGrid(
         for (const cell of row.cells)
           if (
             cell.value !== undefined &&
-            ["array", "object"].includes(typeOf(cell.value)) &&
+            branch(cell.value) &&
             cell.path.length > path.length
           )
             next.add(pathKey(cell.path));
     setExpanded(next);
   }, [props.expansionVersion, props.expansion, schemaKey, targetKind]);
-  const matches = props.searchMatches;
   let rows = model.rows.filter((row) => {
     if (
       filter &&
       query &&
-      !matches.some(
+      !props.searchMatches.some(
         (match) =>
-          row.path.every((key, index) => match[index] === key) ||
-          match.every((key, index) => row.path[index] === key),
+          row.path.every((key, i) => match[i] === key) ||
+          match.every((key, i) => row.path[i] === key),
       )
     )
       return false;
-    return Object.entries(filters).every(([key, expression]) => {
-      if (!expression || !model.columns.includes(key)) return true;
-      const cell = row.cells.find((c) => c.key === key);
-      if (!cell || cell.missing) return false;
-      const text = summary(cell.value!);
-      const numeric = expression.match(
-        /^(>=|<=|>|<|=)\s*(-?(?:0|[1-9]\d*)(?:\.\d+)?(?:e[+-]?\d+)?)$/i,
-      );
-      if (numeric && typeOf(cell.value!) === "number") {
-        const comparison = compareValues(cell.value!, parseJson(numeric[2]));
-        return numeric[1] === ">"
-          ? comparison > 0
-          : numeric[1] === "<"
-            ? comparison < 0
-            : numeric[1] === ">="
-              ? comparison >= 0
-              : numeric[1] === "<="
-                ? comparison <= 0
-                : comparison === 0;
-      }
-      return expression.startsWith("=")
-        ? text.replace(/^"|"$/g, "") === expression.slice(1)
-        : text.toLocaleLowerCase().includes(expression.toLocaleLowerCase());
+    if (filters.index && !passes(row.key, filters.index)) return false;
+    return model.columns.every((column) => {
+      const expression = filters[dataId(column)];
+      if (!expression) return true;
+      const cell = row.cells.find((cell) => cell.key === column);
+      return !!cell && !cell.missing && passes(cell.value!, expression);
     });
   });
   if (sort && model.columns.includes(sort.key))
     rows = [...rows].sort((a, b) => {
-      const ac = a.cells.find((c) => c.key === sort.key),
-        bc = b.cells.find((c) => c.key === sort.key);
-      const aMissing = !ac || ac.missing,
-        bMissing = !bc || bc.missing;
-      if (aMissing || bMissing)
-        return aMissing === bMissing ? 0 : aMissing ? 1 : -1;
+      const ac = a.cells.find((cell) => cell.key === sort.key),
+        bc = b.cells.find((cell) => cell.key === sort.key);
+      const am = !ac || ac.missing,
+        bm = !bc || bc.missing;
+      if (am || bm) return am === bm ? 0 : am ? 1 : -1;
       return compareValues(ac!.value!, bc!.value!) * sort.direction;
     });
   const pageSize = Math.max(1, Math.min(50, props.budget));
   const currentPage = Math.min(
-      page,
-      Math.max(0, Math.ceil(rows.length / pageSize) - 1),
-    ),
-    shown = rows.slice(
-      currentPage * pageSize,
-      currentPage * pageSize + pageSize,
-    );
+    page,
+    Math.max(0, Math.ceil(rows.length / pageSize) - 1),
+  );
+  const shown = rows.slice(
+    currentPage * pageSize,
+    currentPage * pageSize + pageSize,
+  );
   const openedCount = shown.reduce(
-      (count, row) =>
-        count +
-        row.cells.filter(
-          (cell) =>
-            !cell.missing &&
-            ["array", "object"].includes(typeOf(cell.value!)) &&
-            expanded.has(pathKey(cell.path)) &&
-            cell.path.length > path.length,
-        ).length,
-      0,
-    ),
-    childBudget = Math.floor(
-      Math.max(0, props.budget - shown.length) / Math.max(1, openedCount),
-    );
+    (n, row) =>
+      n +
+      row.cells.filter(
+        (cell) =>
+          !cell.missing &&
+          branch(cell.value!) &&
+          expanded.has(pathKey(cell.path)) &&
+          cell.path.length > path.length,
+      ).length,
+    0,
+  );
+  const childBudget = Math.floor(
+    Math.max(0, props.budget - shown.length) / Math.max(1, openedCount),
+  );
   useEffect(() => {
     if (!query) return;
     const index = rows.findIndex((row) =>
@@ -170,22 +192,75 @@ function NestedGrid(
         ?.querySelector('[data-selected="true"]')
         ?.scrollIntoView?.({ block: "nearest" });
   }, [pathKey(selected), query, currentPage]);
+
+  const indexWidth = widths.index ?? (indexed ? 48 : 140);
+  const columnWidths = model.columns.map((column) => {
+    let required = 0;
+    if (childBudget > 0)
+      for (const row of shown) {
+        const cell = row.cells.find((cell) => cell.key === column);
+        if (
+          cell &&
+          !cell.missing &&
+          branch(cell.value!) &&
+          expanded.has(pathKey(cell.path))
+        )
+          required = Math.max(
+            required,
+            (childWidths[pathKey(cell.path)] ?? 0) + 18,
+          );
+      }
+    return Math.max(widths[dataId(column)] ?? 180, required);
+  });
+  const tableWidth =
+    indexWidth + columnWidths.reduce((sum, width) => sum + width, 0);
+  useLayoutEffect(() => {
+    props.onWidth?.(tableWidth + 2);
+  }, [tableWidth, props.onWidth]);
+  const setWidth = (id: string, width: number) =>
+    setWidths((old) => ({ ...old, [id]: width }));
+  const setFilter = (id: string, text: string) => {
+    setFilters((old) => ({ ...old, [id]: text }));
+    setPage(0);
+  };
+  const renderKey = (row: (typeof model.rows)[number]) =>
+    typeof row.key === "string" &&
+    row.path.length > path.length &&
+    targetKind === "object" ? (
+      <InlineKey
+        name={row.key}
+        query={query}
+        revision={props.revision}
+        locale={props.locale}
+        disabled={props.disabled}
+        onCommit={(name) => props.onRename(row.path, name)}
+        onSelect={() => props.onSelect(row.path)}
+      />
+    ) : (
+      <button onClick={() => props.onSelect(row.path)}>
+        <Highlight text={String(row.key)} query={query} />
+      </button>
+    );
   return (
     <div
       className="jg-nested-grid"
+      data-grid-path={pathKey(path)}
       ref={root}
+      style={{ width: tableWidth + 2 }}
       onClick={(event) => event.stopPropagation()}
     >
-      <div className="jg-grid-caption">
-        <button
-          aria-label={collapsed ? t.expandGrid : t.collapseGrid}
-          onClick={() => setCollapsed(!collapsed)}
-        >
-          {collapsed ? "▸" : "▾"}
-        </button>
-        <span>{depth === 0 ? t.jsonData : String(path.at(-1))}</span>
-        <span className="jg-muted">{t.rows(model.rows.length)}</span>
-      </div>
+      {depth === 0 && (
+        <div className="jg-grid-caption">
+          <button
+            aria-label={collapsed ? t.expandGrid : t.collapseGrid}
+            onClick={() => setCollapsed(!collapsed)}
+          >
+            {collapsed ? "▸" : "▾"}
+          </button>
+          <span>{t.jsonData}</span>
+          <span className="jg-muted">{t.rows(model.rows.length)}</span>
+        </div>
+      )}
       {model.notice && (
         <div className="jg-grid-notice" role="status">
           {t.wide(model.columnCount, model.rows.length)}
@@ -194,82 +269,90 @@ function NestedGrid(
       {!collapsed && (
         <>
           <div className="jg-grid-scroll">
-            <table className="jg-table">
+            <table className="jg-table" style={{ width: tableWidth }}>
+              <colgroup>
+                <col style={{ width: indexWidth }} />
+                {model.columns.map((column, index) => (
+                  <col key={column} style={{ width: columnWidths[index] }} />
+                ))}
+              </colgroup>
               <thead>
                 <tr>
-                  <th className="jg-index">{t.index}</th>
-                  {model.columns.map((column) => (
-                    <th
-                      key={column}
-                      style={{
-                        width: widths[column] || 180,
-                        minWidth: widths[column] || 180,
-                      }}
-                    >
-                      <button
-                        className="jg-sort"
-                        aria-label={`${t.sort} ${column}`}
-                        onClick={() => {
-                          setSort({
-                            key: column,
-                            direction:
-                              sort?.key === column ? -sort.direction : 1,
-                          });
-                          setPage(0);
-                        }}
-                      >
-                        <Highlight text={column} query={query} />{" "}
-                        {sort?.key === column
-                          ? sort.direction === 1
-                            ? "↑"
-                            : "↓"
-                          : "↕"}
-                      </button>
-                      <span
-                        role="separator"
-                        aria-label={`${t.resize} ${column}`}
-                        aria-orientation="vertical"
-                        tabIndex={0}
-                        className="jg-resize"
-                        onKeyDown={(e) => {
-                          if (e.key === "ArrowRight" || e.key === "ArrowLeft")
-                            setWidths((w) => ({
-                              ...w,
-                              [column]: Math.max(
-                                90,
-                                (w[column] || 180) +
-                                  (e.key === "ArrowRight" ? 20 : -20),
-                              ),
-                            }));
-                        }}
-                        onPointerDown={(e) => {
-                          e.preventDefault();
-                          const start = e.clientX,
-                            width = widths[column] || 180;
-                          const move = (event: PointerEvent) =>
-                            setWidths((w) => ({
-                              ...w,
-                              [column]: Math.max(
-                                90,
-                                width + event.clientX - start,
-                              ),
-                            }));
-                          const stop = () => {
-                            window.removeEventListener("pointermove", move);
-                            window.removeEventListener("pointerup", stop);
-                          };
-                          window.addEventListener("pointermove", move);
-                          window.addEventListener("pointerup", stop);
-                        }}
+                  <th className="jg-index" style={{ width: indexWidth }}>
+                    <div className="jg-column-heading">
+                      <span>{indexed ? "#" : t.index}</span>
+                      <ColumnFilter
+                        key={schemaKey}
+                        name={indexed ? "#" : t.index}
+                        locale={props.locale}
+                        value={filters.index ?? ""}
+                        onChange={(text) => setFilter("index", text)}
                       />
-                      <input
-                        aria-label={`${t.filter} ${column}`}
-                        placeholder={t.filterHint}
-                        value={filters[column] || ""}
-                        onChange={(e) => {
-                          setFilters({ ...filters, [column]: e.target.value });
-                          setPage(0);
-                        }}
+                    </div>
+                    <ResizeHandle
+                      label={`${t.resize} ${indexed ? "#" : t.index}`}
+                      min={indexed ? 36 : 70}
+                      value={indexWidth}
+                      onChange={(width) => setWidth("index", width)}
+                    />
+                  </th>
+                  {model.columns.map((column, index) => (
+                    <th key={column} style={{ width: columnWidths[index] }}>
+                      <div className="jg-column-heading">
+                        {columnFields ? (
+                          <InlineKey
+                            name={column}
+                            revision={props.revision}
+                            query={query}
+                            locale={props.locale}
+                            disabled={props.disabled}
+                            onCommit={(name) =>
+                              props.onRename(path, name, column)
+                            }
+                            onSelect={() => {
+                              const row = model.rows.find((row) =>
+                                row.cells.some(
+                                  (cell) =>
+                                    cell.key === column && !cell.missing,
+                                ),
+                              );
+                              if (row) props.onSelect([...row.path, column]);
+                            }}
+                          />
+                        ) : (
+                          <span>{column}</span>
+                        )}
+                        <button
+                          className="jg-sort"
+                          aria-label={`${t.sort} ${column}`}
+                          onClick={() => {
+                            setSort({
+                              key: column,
+                              direction:
+                                sort?.key === column ? -sort.direction : 1,
+                            });
+                            setPage(0);
+                          }}
+                        >
+                          {sort?.key === column
+                            ? sort.direction === 1
+                              ? "↑"
+                              : "↓"
+                            : "↕"}
+                        </button>
+                        <ColumnFilter
+                          key={schemaKey}
+                          name={column}
+                          locale={props.locale}
+                          value={filters[dataId(column)] ?? ""}
+                          onChange={(text) => setFilter(dataId(column), text)}
+                        />
+                      </div>
+                      <ResizeHandle
+                        label={`${t.resize} ${column}`}
+                        min={70}
+                        value={columnWidths[index]}
+                        onChange={(width) => setWidth(dataId(column), width)}
                       />
                     </th>
                   ))}
@@ -278,7 +361,10 @@ function NestedGrid(
               <tbody>
                 {shown.map((row) => (
                   <tr key={pathKey(row.path)}>
-                    <th className="jg-row-key">
+                    <th
+                      className={`jg-row-key ${pathKey(row.path) === pathKey(selected) ? "jg-selected" : ""}`}
+                      data-selected={pathKey(row.path) === pathKey(selected)}
+                    >
                       <NodeMenu
                         locale={props.locale}
                         path={row.path}
@@ -286,19 +372,17 @@ function NestedGrid(
                         disabled={props.disabled}
                         onAction={props.onAction}
                       >
-                        <button onClick={() => props.onSelect(row.path)}>
-                          <Highlight text={String(row.key)} query={query} />
-                        </button>
-                        <small>{typeOf(row.value)}</small>
+                        {renderKey(row)}
                       </NodeMenu>
                     </th>
                     {row.cells.map((cell) => {
-                      const branch =
-                          !cell.missing &&
-                          ["array", "object"].includes(typeOf(cell.value!)),
+                      const isBranch = !cell.missing && branch(cell.value!),
                         key = pathKey(cell.path),
                         same = key === pathKey(path),
                         isOpen = expanded.has(key) && !same;
+                      const label = isBranch
+                        ? containerLabel(cell.value!, cell.path)
+                        : "";
                       return (
                         <td
                           key={cell.key}
@@ -328,12 +412,15 @@ function NestedGrid(
                               onAction={props.onAction}
                             >
                               <div className="jg-cell-value">
-                                {branch && !same && (
+                                {isBranch ? (
                                   <button
-                                    className="jg-expander"
-                                    aria-label={`${isOpen ? t.collapse : t.expand} ${cell.key}`}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
+                                    className="jg-container-toggle"
+                                    aria-label={`${isOpen ? t.collapse : t.expand} ${label}`}
+                                    aria-expanded={isOpen}
+                                    disabled={same}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      props.onSelect(cell.path);
                                       setExpanded((old) => {
                                         const next = new Set(old);
                                         if (next.has(key)) next.delete(key);
@@ -342,26 +429,32 @@ function NestedGrid(
                                       });
                                     }}
                                   >
-                                    {isOpen ? "▾" : "▸"}
+                                    <span className="jg-expander">
+                                      {isOpen ? "▾" : "▸"}
+                                    </span>
+                                    <span>
+                                      <Highlight text={label} query={query} />
+                                    </span>
                                   </button>
+                                ) : (
+                                  <InlineValue
+                                    revision={props.revision}
+                                    locale={props.locale}
+                                    value={cell.value!}
+                                    query={query}
+                                    disabled={props.disabled}
+                                    onCommit={(next) =>
+                                      props.onCommit(cell.path, next)
+                                    }
+                                    onEdit={() => props.onEdit(cell.path)}
+                                  />
                                 )}
-                                <InlineValue
-                                  revision={props.revision}
-                                  locale={props.locale}
-                                  value={cell.value!}
-                                  query={query}
-                                  disabled={props.disabled}
-                                  onCommit={(next) =>
-                                    props.onCommit(cell.path, next)
-                                  }
-                                  onEdit={() => props.onEdit(cell.path)}
-                                />
                                 <button
                                   className="jg-edit"
                                   aria-label={`${t.edit} ${cell.key}`}
                                   disabled={props.disabled}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
+                                  onClick={(event) => {
+                                    event.stopPropagation();
                                     props.onEdit(cell.path);
                                   }}
                                 >
@@ -375,15 +468,18 @@ function NestedGrid(
                                     path={cell.path}
                                     depth={depth + 1}
                                     budget={childBudget}
+                                    onWidth={(width) =>
+                                      setChildWidths((old) =>
+                                        old[key] === width
+                                          ? old
+                                          : { ...old, [key]: width },
+                                      )
+                                    }
                                   />
                                 ) : (
-                                  <button
-                                    onClick={() =>
-                                      props.onAction("focus", cell.path)
-                                    }
-                                  >
+                                  <div className="jg-grid-notice">
                                     {t.gridLimit}
-                                  </button>
+                                  </div>
                                 ))}
                             </NodeMenu>
                           )}

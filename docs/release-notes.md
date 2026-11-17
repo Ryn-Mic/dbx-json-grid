@@ -1,18 +1,16 @@
-# JSON Grid 0.1.0
+# JSON Grid 0.2.0
 
-A local JSON workbench for DBX with synchronized source, editable nested grids and a DevTools-style tree.
+- 点击网格或树节点，源码对应行同步高亮；对象和数组覆盖整个块。
+- 双击字段名行内编辑。对象数组列头重命名覆盖所有行，重名时拒绝整次操作，支持撤销。
+- 中线可拖动两区宽度；所有表格列（包括键名/索引列）支持鼠标拖拽和键盘调整。自动索引列默认 48px。
+- 所有列筛选默认只显示图标，点击打开，收起后保留条件，可显式清空。
+- 嵌套容器使用 `key[count]` / `key{count}` 单次展开；匿名容器使用 `list[count]` / `object[count]`。
+- 子表和子列调整会增大父列，并推动后续列，避免覆盖；移除了子树聚焦功能。
 
-- Convert objects, object arrays, mixed arrays and primitive values into nested tables.
-- Edit values inline; change types, add, rename and delete through node actions.
-- Copy correctly escaped JSONPath, keys or subtree JSON.
-- Search keys/values, navigate matches, filter ancestors/rows and sort columns while retaining source indices.
-- Expand/collapse, choose expansion depth, resize columns and paginate large collections.
-- Format/minify, parse JSON strings, encode JSON strings, import/export and share undo/redo across views.
-- Preserve unsafe integers and numeric lexemes, distinguish missing from null and reject duplicate object keys.
-- Chinese/English UI, DBX theme tokens, capability-checked clipboard/file operations and opt-in bounded drafts.
+Source block highlighting, inline field/column renaming, draggable split and all columns, compact indices, icon filters, and single-toggle nested tables that grow parent columns. Subtree focus was removed.
 
-MIT licensed. No native sidecar or network permission. `host.storage` stores optional drafts/settings; `host.clipboard:read` enables the user-triggered Paste button where supported. Keyboard paste works without clipboard-read support.
+Verified with 61 unit/component tests and 24 real browser cases, including the official opaque-origin DBX development host. Lossless numbers, shared history, context isolation and draft/import race checks remain covered.
 
-The universal `.dbxp` is an **unsigned review candidate**. Official marketplace discovery and installation require DBX Store maintainer review, signing and merge. For local testing, DBX permits manual installation when unsigned development packages are explicitly enabled.
+MIT licensed. Static universal plugin with bundled dependencies; permissions remain `host.storage` and `host.clipboard:read`. No native sidecar or runtime network permission.
 
-Limits: 10 MiB UTF-8 input, 256 nesting levels, 5,000 tree/display expansion budget, up to 50 grid rows per page. Wide schemas switch to complete expandable row values. Drafts retain at most two small documents (96 KiB input each, at most 240 KiB serialized combined). Larger documents should be exported.
+The `.dbxp` remains an **unsigned review candidate**. Official marketplace publication requires DBX Store maintainer review, signing and merge. Manual installation requires explicitly enabling unsigned development packages; restore that setting after installation.

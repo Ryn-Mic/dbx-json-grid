@@ -16,9 +16,9 @@
 .jg-nested-grid {
   border: 1px solid var(--jg-border);
   border-radius: 5px;
-  overflow: hidden;
+  overflow: visible;
   background: var(--jg-panel);
-  min-width: 250px;
+  min-width: 0;
 }
 .jg-nested-grid .jg-nested-grid {
   margin: 5px 0;
@@ -41,14 +41,12 @@
   font-weight: 400;
 }
 .jg-grid-scroll {
-  overflow: auto;
-  max-height: 650px;
+  overflow: visible;
 }
 .jg-table {
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
-  width: 100%;
   font-size: 12px;
 }
 .jg-table th,
@@ -79,10 +77,21 @@
     monospace;
   padding: 3px 5px;
 }
-.jg-index {
-  width: 110px;
-  min-width: 110px;
-}
+.jg-table th, .jg-table td { overflow-wrap: anywhere; }
+.jg-nested-grid .jg-nested-grid thead th { position: relative; }
+.jg-column-heading { display: flex; align-items: center; gap: 3px; min-height: 22px; padding-right: 3px; }
+.jg-column-heading > .jg-key, .jg-column-heading > span { flex: 1; min-width: 0; }
+.jg-filter-control { position: relative; flex: none; }
+.jg-filter-button { display: flex; align-items: center; padding: 3px !important; }
+.jg-filter-active { color: var(--jg-accent) !important; background: var(--jg-accent-soft) !important; }
+.jg-filter-popover { position: absolute; right: 0; top: calc(100% + 5px); width: 205px; padding: 6px; display: flex; gap: 3px; background: var(--jg-panel); border: 1px solid var(--jg-border); border-radius: 5px; box-shadow: 0 4px 16px #0002; z-index: 5; }
+.jg-table thead .jg-filter-popover input { margin: 0; min-width: 0; flex: 1; }
+.jg-filter-popover button { display: flex; align-items: center; }
+.jg-key { cursor: text; }
+.jg-key-editor { min-width: 0; max-width: 100%; }
+.jg-key-editor input { width: 100%; min-width: 40px; }
+.jg-container-toggle { display: inline-flex; align-items: center; text-align: left; white-space: nowrap; padding-left: 0 !important; }
+.jg-grid-notice { padding: 8px; color: var(--jg-muted); }
 .jg-table .jg-row-key {
   background: var(--jg-bg);
   font-weight: 400;
@@ -148,8 +157,7 @@
 }
 .jg-sort {
   font-weight: 600 !important;
-  text-align: left;
-  width: calc(100% - 10px);
+  padding: 2px 3px !important;
 }
 .jg-resize {
   position: absolute;
@@ -158,6 +166,9 @@
   width: 6px;
   height: 100%;
   cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  z-index: 6;
 }
 .jg-resize:hover {
   background: var(--jg-accent-soft);
@@ -264,3 +275,6 @@ input:focus-visible,
   outline: 2px solid var(--jg-accent);
   outline-offset: 1px;
 }
+.jg-table thead th:has(.jg-filter-popover){z-index:10}
+.jg-filter-popover{position:fixed;right:auto}
+.jg-branch-count{color:var(--jg-muted);margin-left:-5px}

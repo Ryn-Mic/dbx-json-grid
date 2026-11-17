@@ -116,6 +116,18 @@ export function renameAt(value: JsonValue, path: JsonPath, key: string): JsonVal
   return setAt(value,parentPath,next);
 }
 export function pathKey(path: JsonPath): string { return JSON.stringify(path); }
+/** Rename a projected object-array column atomically, including currently filtered-out rows. */
+export function renameColumn(value: JsonValue, path: JsonPath, oldKey: string, key: string): JsonValue {
+  const target = getAt(value, path);
+  if (!Array.isArray(target) || !target.every(row => typeOf(row) === 'object')) throw new Error('Expected an object array');
+  if (oldKey === key) return value;
+  // A collision in any row rejects the entire operation, even if that row lacks oldKey.
+  if (target.some(row => own(row as JsonObject, key))) throw new Error('Duplicate object key');
+  const next = target.map(row => own(row as JsonObject, oldKey)
+    ? Object.fromEntries(Object.entries(row as JsonObject).map(([name, child]) => [name === oldKey ? key : name, child]))
+    : row);
+  return setAt(value, path, next);
+}
 export function formatPath(path: JsonPath): string {
   return '$' + path.map(key => typeof key === 'number' ? `[${key}]` : /^[A-Za-z_$][\w$]*$/.test(key) ? `.${key}` : `[${JSON.stringify(key)}]`).join('');
 }

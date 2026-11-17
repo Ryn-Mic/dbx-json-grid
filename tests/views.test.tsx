@@ -28,6 +28,7 @@ function props(source: string, overrides: Partial<ViewProps> = {}): ViewProps {
     onSelect: vi.fn(),
     onEdit: vi.fn(),
     onCommit: vi.fn(),
+    onRename: vi.fn(),
     onAction: vi.fn(),
     ...overrides,
   };
@@ -93,6 +94,7 @@ describe("editable JSON views", () => {
     const p = props('[{"score":2},{"score":1}]');
     render(<GridView {...p} />);
     fireEvent.click(screen.getByRole("button", { name: "Sort score" }));
+    fireEvent.click(screen.getByRole("button", { name: "Filter score" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Filter score" }), {
       target: { value: "<2" },
     });
@@ -117,14 +119,14 @@ describe("editable JSON views", () => {
   it("supports mixed arrays and empty object rows through nested grids", () => {
     const { unmount } = render(<GridView {...props('[1,{"x":2},[]]')} />);
     expect(screen.queryByText("x")).toBeNull();
-    fireEvent.click(screen.getAllByRole("button", { name: "Expand value" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: /^Expand (object|list)/ })[0]);
     expect(screen.getByText("x")).toBeTruthy();
-    expect(screen.getByText("[0 items]")).toBeTruthy();
+    expect(screen.getByText("list[0]")).toBeTruthy();
     unmount();
     render(<GridView {...props("[{},{}]")} />);
-    expect(screen.getAllByText("{0 keys}")).toHaveLength(2);
+    expect(screen.getAllByText("object[0]")).toHaveLength(2);
     expect(
-      screen.getAllByRole("button", { name: "Expand value" }),
+      screen.getAllByRole("button", { name: /^Expand (object|list)/ }),
     ).toHaveLength(2);
   });
   it("paginates 50 source rows and opens a keyboard accessible context menu", () => {
@@ -193,10 +195,11 @@ describe("editable JSON views", () => {
       { locale: "zh-CN" },
     );
     render(<GridView {...p} />);
-    expect(screen.getByText("键名 / 索引")).toBeTruthy();
-    expect(screen.getAllByText("object").length).toBe(50);
+    expect(screen.getByText("#")).toBeTruthy();
+    expect(screen.queryByText("object")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "下一页" }));
     expect(screen.getByText("50", { selector: ".jg-value" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "筛选 score" }));
     fireEvent.change(screen.getByRole("textbox", { name: "筛选 score" }), {
       target: { value: ">49" },
     });
@@ -227,13 +230,13 @@ describe("editable JSON views", () => {
     for (const name of ['"Alice Chen"', '"Noah Park"', '"Mia Wilson"'])
       expect(screen.getByText(name)).toBeTruthy();
     expect(
-      screen.getAllByRole("button", { name: "Expand items" }),
+      screen.getAllByRole("button", { name: /^Expand items\[/ }),
     ).toHaveLength(3);
     expect(
-      screen.getAllByRole("button", { name: "Expand shipping" }),
+      screen.getAllByRole("button", { name: /^Expand shipping\{/ }),
     ).toHaveLength(3);
     expect(screen.queryByText('"Mechanical keyboard"')).toBeNull();
-    fireEvent.click(screen.getAllByRole("button", { name: "Expand items" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: /^Expand items\[/ })[0]);
     expect(screen.getByText('"Mechanical keyboard"')).toBeTruthy();
   });
   it("highlights every case-insensitive literal occurrence without HTML injection", () => {
@@ -252,6 +255,7 @@ describe("editable JSON views", () => {
     const initial = props('[{"a":2},{"a":1}]');
     const { rerender } = render(<GridView {...initial} />);
     fireEvent.click(screen.getByRole("button", { name: "Sort a" }));
+    fireEvent.click(screen.getByRole("button", { name: "Filter a" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Filter a" }), {
       target: { value: ">0" },
     });
@@ -259,7 +263,7 @@ describe("editable JSON views", () => {
     expect(screen.getByRole("button", { name: "Sort b" })).toHaveTextContent(
       "↕",
     );
-    expect(screen.getByRole("textbox", { name: "Filter b" })).toHaveValue("");
+    expect(screen.queryByRole("textbox", { name: "Filter b" })).toBeNull();
     expect(screen.getByText("2", { selector: ".jg-value" })).toBeTruthy();
     expect(screen.getByText("1", { selector: ".jg-value" })).toBeTruthy();
   });
@@ -274,13 +278,14 @@ describe("editable JSON views", () => {
     fireEvent.keyDown(screen.getByRole("separator", { name: "Resize a" }), {
       key: "ArrowRight",
     });
+    fireEvent.click(screen.getByRole("button", { name: "Filter a" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Filter a" }), {
       target: { value: ">0" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Next page" }));
     expect(screen.queryByText("0", { selector: ".jg-value" })).toBeNull();
     rerender(<GridView {...props(after)} />);
-    expect(screen.getByRole("textbox", { name: "Filter a" })).toHaveValue("");
+    expect(screen.queryByRole("textbox", { name: "Filter a" })).toBeNull();
     expect(
       screen.getByRole("separator", { name: "Resize a" }).closest("th"),
     ).toHaveStyle({ width: "180px" });
@@ -339,14 +344,14 @@ describe("editable JSON views", () => {
       expect(initial.onCommit).not.toHaveBeenCalled();
     },
   );
-  it("keeps a focused order array compact by default and honors explicit expand-all", () => {
+  it("keeps a nested order array compact by default and honors explicit expand-all", () => {
     const initial = props(SAMPLE, { path: ["orders"] });
     const { rerender } = render(<GridView {...initial} />);
     expect(
-      screen.getAllByRole("button", { name: "Expand items" }),
+      screen.getAllByRole("button", { name: /^Expand items\[/ }),
     ).toHaveLength(3);
     expect(
-      screen.getAllByRole("button", { name: "Expand shipping" }),
+      screen.getAllByRole("button", { name: /^Expand shipping\{/ }),
     ).toHaveLength(3);
     expect(screen.queryByText('"Mechanical keyboard"')).toBeNull();
     for (const name of ['"Alice Chen"', '"Noah Park"', '"Mia Wilson"'])

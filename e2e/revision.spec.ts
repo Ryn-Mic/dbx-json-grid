@@ -15,7 +15,7 @@ test('valid source schema replacement clears stale sort and keeps the workbench 
   await replaceSource(page, source, '[{"b":2},{"b":1}]');
   await expect(view.getByRole('button', { name: '排序 b', exact: true })).toBeVisible();
   await expect(view.locator('.jg-value')).toHaveText(['2', '1']);
-  await expect(view.getByRole('textbox', { name: '筛选 b', exact: true })).toHaveValue('');
+  await expect(view.getByRole('textbox', { name: '筛选 b', exact: true })).toHaveCount(0);
   await view.getByRole('button', { name: '排序 b', exact: true }).click();
   await expect(view.locator('.jg-value')).toHaveText(['1', '2']);
   await expect(source).toContainText('"b"');
@@ -50,17 +50,18 @@ for (const scenario of [
   });
 }
 
-test('focusing an object array keeps all orders compact until explicit expansion', async ({ page }) => {
+test('nested order array has no focus action and expands items with one click', async ({ page }) => {
   await page.goto('/');
   const view = page.locator('.view-pane');
-  await view.getByText('[3 项]', { exact: true }).click({ button: 'right' });
-  await view.getByRole('menuitem', { name: '聚焦此处', exact: true }).click();
-  await expect(view.getByRole('button', { name: '展开 items', exact: true })).toHaveCount(3);
-  await expect(view.getByRole('button', { name: '展开 shipping', exact: true })).toHaveCount(3);
+  await view.getByText('orders[3]', { exact: true }).click({ button: 'right' });
+  await expect(view.getByRole('menuitem', { name: '聚焦此处', exact: true })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(view.getByRole('button', { name: /^展开 items\[/ })).toHaveCount(3);
+  await expect(view.getByRole('button', { name: /^展开 shipping\{/ })).toHaveCount(3);
   for (const name of ['"Alice Chen"', '"Noah Park"', '"Mia Wilson"']) {
     await expect(view.getByText(name, { exact: true })).toBeVisible();
   }
   await expect(view.getByText('"Mechanical keyboard"', { exact: true })).toHaveCount(0);
-  await view.getByRole('button', { name: '展开 items', exact: true }).first().click();
+  await view.getByRole('button', { name: /^展开 items\[/ }).first().click();
   await expect(view.getByText('"Mechanical keyboard"', { exact: true })).toBeVisible();
 });

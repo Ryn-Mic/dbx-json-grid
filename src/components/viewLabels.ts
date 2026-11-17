@@ -1,4 +1,4 @@
-import { summary, typeOf, type JsonValue } from "../core/json";
+import { summary, typeOf, type JsonPath, type JsonValue } from "../core/json";
 import type { ViewProps } from "./types";
 const en = {
   editValue: "Edit value",
@@ -8,7 +8,6 @@ const en = {
   copyPath: "Copy path",
   copyKey: "Copy key",
   copyValue: "Copy value",
-  focus: "Focus here",
   add: "Add child",
   rename: "Rename",
   delete: "Delete",
@@ -19,7 +18,7 @@ const en = {
   expandGrid: "Expand grid",
   collapseGrid: "Collapse grid",
   treeLimit:
-    "Showing the first 5,000 nodes. Collapse branches or focus a subtree.",
+    "Showing the first 5,000 nodes. Collapse branches to see other nodes.",
   noNodes: "No matching nodes",
   jsonData: "JSON data",
   index: "Key / index",
@@ -29,7 +28,10 @@ const en = {
   filterHint: "Filter · =, >, <",
   missing: "missing · add",
   edit: "Edit",
-  gridLimit: "Visible row limit reached · focus subtree",
+  gridLimit: "Visible row limit reached. Collapse other branches to expand this one.",
+  clearFilter: "Clear filter",
+  keyHint: "Double-click or F2 to rename",
+  editKey: "Edit field name",
   noRows: "No matching rows",
   empty: "Empty container",
   previous: "Previous page",
@@ -46,7 +48,6 @@ const zh: typeof en = {
   copyPath: "复制路径",
   copyKey: "复制键名",
   copyValue: "复制值",
-  focus: "聚焦此处",
   add: "添加子项",
   rename: "重命名",
   delete: "删除",
@@ -56,7 +57,7 @@ const zh: typeof en = {
   root: "根节点",
   expandGrid: "展开表格",
   collapseGrid: "折叠表格",
-  treeLimit: "仅显示前 5,000 个节点。请折叠分支或聚焦子树。",
+  treeLimit: "仅显示前 5,000 个节点。请折叠分支以查看其他节点。",
   noNodes: "没有匹配的节点",
   jsonData: "JSON 数据",
   index: "键名 / 索引",
@@ -66,7 +67,10 @@ const zh: typeof en = {
   filterHint: "筛选 · =、>、<",
   missing: "缺失 · 添加",
   edit: "编辑",
-  gridLimit: "已达到可见行数上限 · 聚焦子树",
+  gridLimit: "已达到可见行数上限，请折叠其他分支后再展开。",
+  clearFilter: "清除筛选",
+  keyHint: "双击或 F2 重命名",
+  editKey: "编辑字段名",
   noRows: "没有匹配的行",
   empty: "空容器",
   previous: "上一页",
@@ -84,4 +88,11 @@ export function viewSummary(value: JsonValue, locale: ViewProps["locale"]) {
       return `{${Object.keys(value as object).length} 个键}`;
   }
   return summary(value);
+}
+
+export function containerLabel(value: JsonValue, path: JsonPath) {
+  const name = path.at(-1), named = typeof name === 'string';
+  if (Array.isArray(value)) return `${named ? name : 'list'}[${value.length}]`;
+  const count = Object.keys(value as object).length;
+  return named ? `${name}{${count}}` : `object[${count}]`;
 }

@@ -34,7 +34,6 @@ export function NodeMenu({
     ["copy-path", t.copyPath],
     ["copy-key", t.copyKey],
     ["copy-value", t.copyValue],
-    ["focus", t.focus],
   ];
   if (!disabled) {
     if (["array", "object"].includes(typeOf(value)))

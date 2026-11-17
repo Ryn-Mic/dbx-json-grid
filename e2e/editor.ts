@@ -6,5 +6,5 @@ export async function replaceSource(page: Page, source: Locator, text: string) {
   await source.click();
   await source.press('ControlOrMeta+A');
   await page.keyboard.insertText(text);
-  await expect(source).toHaveText(text);
+  await expect(source).toHaveText(text, { useInnerText: true });
 }

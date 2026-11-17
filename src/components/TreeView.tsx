@@ -9,10 +9,11 @@ import {
   type JsonValue,
 } from "../core/json";
 import { InlineValue, Highlight } from "./InlineValue";
+import { InlineKey } from "./InlineKey";
 import { NodeMenu } from "./NodeMenu";
 import type { ViewProps } from "./types";
 import "./views.css";
-import { viewLabels } from "./viewLabels";
+import { viewLabels, containerLabel } from "./viewLabels";
 const isBranch = (value: JsonValue) =>
   ["array", "object"].includes(typeOf(value));
 export function TreeView(props: ViewProps) {
@@ -192,6 +193,7 @@ export function TreeView(props: ViewProps) {
                     disabled={!isBranch(row.value)}
                     onClick={(e) => {
                       e.stopPropagation();
+                      props.onSelect(row.path);
                       toggle(row.path, e.altKey);
                     }}
                   >
@@ -201,22 +203,49 @@ export function TreeView(props: ViewProps) {
                         : "▸"
                       : "·"}
                   </button>
-                  <span className="jg-key">
-                    <Highlight
-                      text={String(row.path.at(-1) ?? "$")}
+                  {typeof row.path.at(-1) === "string" ? (
+                    <InlineKey
+                      name={String(row.path.at(-1))}
+                      revision={props.revision}
                       query={query}
+                      disabled={props.disabled}
+                      locale={props.locale}
+                      onCommit={(name) => props.onRename(row.path, name)}
                     />
-                  </span>
-                  <span className="jg-colon">:</span>
-                  <InlineValue
-                    revision={props.revision}
-                    locale={props.locale}
-                    value={row.value}
-                    query={query}
-                    disabled={props.disabled}
-                    onCommit={(next) => props.onCommit(row.path, next)}
-                    onEdit={() => props.onEdit(row.path)}
-                  />
+                  ) : (
+                    <span className="jg-key">
+                      <Highlight
+                        text={
+                          isBranch(row.value)
+                            ? containerLabel(row.value, row.path)
+                            : String(row.path.at(-1) ?? "$")
+                        }
+                        query={query}
+                      />
+                    </span>
+                  )}
+                  {isBranch(row.value) &&
+                    typeof row.path.at(-1) === "string" && (
+                      <span className="jg-branch-count">
+                        {Array.isArray(row.value)
+                          ? `[${row.value.length}]`
+                          : `{${Object.keys(row.value as object).length}}`}
+                      </span>
+                    )}
+                  {!isBranch(row.value) && (
+                    <>
+                      <span className="jg-colon">:</span>
+                      <InlineValue
+                        revision={props.revision}
+                        locale={props.locale}
+                        value={row.value}
+                        query={query}
+                        disabled={props.disabled}
+                        onCommit={(next) => props.onCommit(row.path, next)}
+                        onEdit={() => props.onEdit(row.path)}
+                      />
+                    </>
+                  )}
                 </div>
               </NodeMenu>
             </div>

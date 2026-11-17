@@ -3,7 +3,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import { json } from '@codemirror/lang-json';
 import { EditorView } from '@codemirror/view';
 import { ArrowDown, ArrowUp, Braces, Check, ChevronRight, ChevronsDownUp, ChevronsUpDown, ClipboardPaste, Copy, Download, FileJson, FolderOpen, Grid2X2, ListTree, Maximize2, Minimize2, Moon, MoreHorizontal, Plus, Redo2, Search, ShieldCheck, SlidersHorizontal, Sun, Undo2, X } from 'lucide-react';
-import { findMatches, formatPath, getAt, insertAt, parseJson, pathKey, removeAt, renameAt, setAt, stringifyJson, typeOf, type JsonPath, type JsonValue } from './core/json';
+import { findMatches, formatPath, getAt, insertAt, parseJson, removeAt, renameAt, renameColumn, setAt, stringifyJson, typeOf, type JsonPath, type JsonValue } from './core/json';
 import { Bridge, byteSize, clearDraft, createBridge, MAX_FILE_BYTES, readDraft, saveDraft, type Appearance, type Locale } from './host/bridge';
 import { GridView } from './components/GridView';
 import { TreeView } from './components/TreeView';
@@ -11,6 +11,9 @@ import type { NodeAction, ViewProps } from './components/types';
 import { labels } from './labels';
 import { SAMPLE } from './sample';
 import { useDocument } from './useDocument';
+import { ResizeHandle } from './components/ResizeHandle';
+import { parseSource, sourceRange } from './core/source';
+import { highlightSource, sourceHighlight } from './sourceHighlight';
 
 type Kind = 'string' | 'number' | 'boolean' | 'null' | 'object' | 'array';
 type Modal = { mode: 'edit' | 'add' | 'rename' | 'delete'; path: JsonPath; kind: Kind; key: string; text: string };
@@ -18,7 +21,6 @@ type Preferences = { split?: number; draft?: boolean; fontSize?: number };
 const kinds: Kind[] = ['string', 'number', 'boolean', 'null', 'object', 'array'];
 const defaults: Record<Kind, string> = { string: '', number: '0', boolean: 'true', null: 'null', object: '{}', array: '[]' };
 const iconsize = 15;
-const samePath = (a: JsonPath, b: JsonPath) => pathKey(a) === pathKey(b);
 function IconButton({ label, children, active, ...props }: { label: string; children: ReactNode; active?: boolean } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return <button {...props} className={`icon-button ${active ? 'active' : ''} ${props.className ?? ''}`} title={label} aria-label={label}>{children}</button>;
 }
@@ -32,7 +34,10 @@ export function App() {
   const [name, setName] = useState('orders.json');
   const [tab, setTab] = useState<'grid' | 'tree'>('grid');
   const [selected, setSelected] = useState<JsonPath>([]);
-  const [focus, setFocus] = useState<JsonPath>([]);
+  const [selectionActive, setSelectionActive] = useState(false);
+  const [selectionVersion, setSelectionVersion] = useState(0);
+  const lastScrolledSelection = useRef(0);
+  const select = useCallback((path: JsonPath) => { setSelected(path); setSelectionActive(true); setSelectionVersion(v => v + 1); }, []);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState(false);
   const [matchIndex, setMatchIndex] = useState(0);
@@ -66,7 +71,7 @@ export function App() {
     setToast(message); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(''), 5000);
   }, []);
   const error = useCallback((cause: unknown) => notify(cause instanceof Error ? cause.message : String(cause)), [notify]);
-  const resetLocation = () => { setSelected([]); setFocus([]); setQuery(''); setMatchIndex(0); setExpansion('default'); setExpansionVersion(v => v + 1); };
+  const resetLocation = () => { setSelected([]); setSelectionActive(false); setQuery(''); setMatchIndex(0); setExpansion('default'); setExpansionVersion(v => v + 1); };
   const load = (file: { name: string; text: string }, epoch = importEpoch.current) => {
     if (epoch !== importEpoch.current) return;
     doc.edit(file.text); setName(file.name); setModal(null); resetLocation();
@@ -80,7 +85,7 @@ export function App() {
       const saved = prefs?.draft && !next.host?.context?.newQuery ? await readDraft(next).catch(() => null) : null;
       if (!live) return;
       setLocale(next.locale); setAppearance(next.appearance);
-      if (prefs?.split && prefs.split >= 20 && prefs.split <= 65) setSplit(prefs.split);
+      if (prefs?.split && prefs.split >= 20 && prefs.split <= 80) setSplit(prefs.split);
       if (prefs?.fontSize && prefs.fontSize >= 11 && prefs.fontSize <= 20) setFontSize(prefs.fontSize);
       setDraftEnabled(prefs?.draft === true);
       if (saved) { doc.edit(saved.text); setName(saved.name); }
@@ -150,16 +155,6 @@ export function App() {
     const epoch = importEpoch.current;
     return bridge?.onDrop(file => load(file, epoch), cause => { if (epoch === importEpoch.current) error(cause); });
   }, [bridge, error]);
-  useEffect(() => {
-    if (!dragging) return;
-    const move = (event: PointerEvent) => {
-      const rect = workbench.current!.getBoundingClientRect();
-      setSplit(Math.max(20, Math.min(65, (event.clientX - rect.left) / rect.width * 100)));
-    };
-    const stop = () => setDragging(false);
-    window.addEventListener('pointermove', move); window.addEventListener('pointerup', stop, { once: true });
-    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', stop); };
-  }, [dragging]);
   const value = doc.value;
   useEffect(() => {
     if (value !== undefined) try { getAt(value, selected); } catch { setSelected([]); }
@@ -170,19 +165,15 @@ export function App() {
   const chooseMatch = (direction: number) => {
     if (!matches.length) return;
     const next = (activeIndex + direction + matches.length) % matches.length;
-    setMatchIndex(next); setSelected(matches[next]); setFocus([]);
+    setMatchIndex(next); select(matches[next]);
   };
   useEffect(() => {
-    if (query && matches.length) { setSelected(matches[0]); setFocus([]); }
+    if (query && matches.length) { select(matches[0]); }
   }, [matches, query]);
   const selectedValue = useMemo(() => {
     if (value === undefined) return undefined;
     try { return getAt(value, selected); } catch { return value; }
   }, [value, selected]);
-  const safeFocus = useMemo(() => {
-    if (value !== undefined) try { getAt(value, focus); return focus; } catch { /* deleted focus returns to root */ }
-    return [];
-  }, [value, focus]);
   const structured = value !== undefined;
   const run = (operation: () => void | Promise<unknown>) => {
     const epoch = importEpoch.current;
@@ -193,8 +184,7 @@ export function App() {
     const epoch = importEpoch.current;
     if (value === undefined) return;
     const target = getAt(value, path);
-    setSelected(path);
-    if (kind === 'focus') { setFocus(path); return; }
+    select(path);
     if (kind.startsWith('copy')) {
       const text = kind === 'copy-path' ? formatPath(path) : kind === 'copy-key' ? String(path.at(-1) ?? '$') : stringifyJson(target, 2);
       await bridge?.copy(text); if (epoch === importEpoch.current) notify(t.copied); return;
@@ -209,7 +199,7 @@ export function App() {
   const requestEdit = (path: JsonPath) => {
     if (value === undefined) return;
     const target = getAt(value, path);
-    setModalError(''); setSelected(path);
+    setModalError(''); select(path);
     setModal({ mode: 'edit', path, kind: typeOf(target) as Kind, key: '', text: typeof target === 'string' ? target : stringifyJson(target, 2) });
   };
   const applyModal = () => {
@@ -279,8 +269,24 @@ export function App() {
     };
     window.addEventListener('keydown', key, true); return () => window.removeEventListener('keydown', key, true);
   });
-  const editorExtensions = useMemo(() => [json(), EditorView.lineWrapping, EditorView.theme({ '&': { fontSize: `${fontSize}px`, backgroundColor: 'transparent' }, '.cm-scroller': { fontFamily: 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace)' }, '.cm-gutters': { backgroundColor: 'transparent', border: 'none', color: 'var(--jg-muted)' }, '.cm-content': { padding: '16px 0' } })], [fontSize]);
-  const viewProps: ViewProps | null = value === undefined ? null : { value, revision: doc.text, path: safeFocus, selected, onSelect: setSelected, onEdit: requestEdit, onCommit: (path, next) => run(() => doc.apply(current => setAt(current, path, next))), onAction: action, query, filter, expansion, expansionVersion, disabled: !bridge || busy, locale };
+  const editorExtensions = useMemo(() => [json(), sourceHighlight, EditorView.lineWrapping, EditorView.theme({ '&': { fontSize: `${fontSize}px`, backgroundColor: 'transparent' }, '.cm-scroller': { fontFamily: 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace)' }, '.cm-gutters': { backgroundColor: 'transparent', border: 'none', color: 'var(--jg-muted)' }, '.cm-content': { padding: '16px 0' } })], [fontSize]);
+  const sourceTree = useMemo(() => value === undefined ? null : parseSource(doc.text), [doc.text, value]);
+  const selectedRange = useMemo(() => selectionActive ? sourceRange(doc.text, sourceTree, selected) : null, [doc.text, sourceTree, selected, selectionActive]);
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor || editor.state.doc.toString() !== doc.text) return;
+    const scroll = selectionVersion !== lastScrolledSelection.current;
+    lastScrolledSelection.current = selectionVersion;
+    editor.dispatch({ effects: [highlightSource.of(selectedRange), ...(scroll && selectedRange ? [EditorView.scrollIntoView(selectedRange.from, { y: 'nearest' })] : [])] });
+  }, [selectedRange, doc.text, selectionVersion]);
+  const rename = (path: JsonPath, key: string, column?: string) => {
+    doc.apply(current => column === undefined ? renameAt(current, path, key) : renameColumn(current, path, column, key));
+    if (column === undefined) select([...path.slice(0, -1), key]);
+    else if (path.every((part, index) => selected[index] === part) && selected[path.length + 1] === column) {
+      select([...selected.slice(0, path.length + 1), key, ...selected.slice(path.length + 2)]);
+    }
+  };
+  const viewProps: ViewProps | null = value === undefined ? null : { value, revision: doc.text, path: [], selected, onSelect: select, onEdit: requestEdit, onRename: rename, onCommit: (path, next) => run(() => doc.apply(current => setAt(current, path, next))), onAction: action, query, filter, expansion, expansionVersion, disabled: !bridge || busy, locale };
 
   return <div className={`app ${dragging ? 'resizing' : ''}`}>
     <header className="app-header">
@@ -332,17 +338,17 @@ export function App() {
         {doc.error && <div className="parse-error" role="alert">{doc.error}</div>}
       </section>
 
-      <div className="resize-handle" role="separator" aria-orientation="vertical" aria-label={t.split} aria-valuenow={Math.round(split)} aria-valuemin={20} aria-valuemax={65} tabIndex={0} onDoubleClick={() => setSplit(37)} onPointerDown={event => { event.preventDefault(); setDragging(true); }} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); setSplit(Math.max(20, Math.min(65, split + (event.key === 'ArrowLeft' ? -2 : 2)))); } }}><span /></div>
+      <ResizeHandle className="resize-handle" label={t.split} value={split} min={20} max={80} step={2} onChange={setSplit} onDragging={setDragging} onDoubleClick={() => setSplit(37)} axis={() => window.innerWidth <= 640 ? 'y' : 'x'} scale={() => { const rect = workbench.current!.getBoundingClientRect(); return (window.innerWidth <= 640 ? rect.height : rect.width) / 100; }} />
 
       <section className="view-pane" aria-label={t.schema}>
         <div className="pane-header view-header"><div className="view-tabs" role="tablist"><button role="tab" aria-selected={tab === 'grid'} onClick={() => setTab('grid')}><Grid2X2 size={14} />{t.grid}</button><button role="tab" aria-selected={tab === 'tree'} onClick={() => setTab('tree')}><ListTree size={15} />{t.tree}</button></div><div className="pane-actions"><IconButton label={t.expand} onClick={() => expand('all')} disabled={!structured}><ChevronsUpDown size={14} /></IconButton><IconButton label={t.collapse} onClick={() => expand('none')} disabled={!structured}><ChevronsDownUp size={14} /></IconButton><select className="depth-select" aria-label={t.depth} value={typeof expansion === 'number' ? String(expansion) : ''} onChange={event => { if (event.target.value) expand(Number(event.target.value)); }}><option value="">{t.depth}</option>{[1, 2, 3, 4].map(depth => <option value={depth} key={depth}>{depth}</option>)}</select><IconButton label={layout === 'view' ? t.split : t.focusView} onClick={() => setLayout(layout === 'view' ? 'split' : 'view')}>{layout === 'view' ? <Minimize2 size={13} /> : <Maximize2 size={13} />}</IconButton></div></div>
         <div className="search-toolbar"><div className="search-field"><Search size={14} /><input ref={searchInput} placeholder={t.search} aria-label={t.search} value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') chooseMatch(event.shiftKey ? -1 : 1); if (event.key === 'Escape') setQuery(''); }} />{query && <><span className="match-count">{matches.length ? `${activeIndex + 1}/${matches.length}` : '0/0'}</span><IconButton label={t.previous} disabled={!matches.length} onClick={() => chooseMatch(-1)}><ArrowUp size={12} /></IconButton><IconButton label={t.next} disabled={!matches.length} onClick={() => chooseMatch(1)}><ArrowDown size={12} /></IconButton><IconButton label={t.close} onClick={() => setQuery('')}><X size={12} /></IconButton></>}</div><IconButton label={t.filter} active={filter} onClick={() => setFilter(!filter)}><SlidersHorizontal size={15} /></IconButton></div>
-        <nav className="breadcrumbs" aria-label="JSONPath"><button onClick={() => { setFocus([]); setSelected([]); }}><Braces size={12} /><span>$</span></button>{safeFocus.map((key, index) => <span className="crumb" key={index}><ChevronRight size={11} /><button onClick={() => { const path = safeFocus.slice(0, index + 1); setFocus(path); setSelected(path); }}>{String(key)}</button></span>)}<span className="view-hint">{t.help}</span></nav>
+        <nav className="breadcrumbs" aria-label="JSONPath"><button onClick={() => select([])}><Braces size={12} /><span>$</span></button>{selected.map((key, index) => <span className="crumb" key={index}><ChevronRight size={11} /><button onClick={() => select(selected.slice(0, index + 1))}>{String(key)}</button></span>)}<span className="view-hint">{t.help}</span></nav>
         <div className="view-content">{viewProps ? tab === 'grid' ? <GridView {...viewProps} /> : <TreeView {...viewProps} /> : <div className="empty-state"><div className="empty-icon"><Braces size={32} /></div><h2>{doc.error ? t.invalid : t.empty}</h2><p>{doc.error ?? t.onlyJSON}</p>{!doc.error && <button className="text-button" onClick={() => load({ name: 'orders.json', text: SAMPLE })}>{t.sample}<ChevronRight size={14} /></button>}</div>}</div>
-        <div className="selection-bar"><span className={`type-dot type-${selectedValue === undefined ? 'null' : typeOf(selectedValue)}`} /><span className="node-type">{selectedValue === undefined ? '—' : typeOf(selectedValue)}</span><code title={formatPath(selected)}>{formatPath(selected)}</code><div className="selection-actions"><IconButton label={t.copyPath} disabled={!structured || !bridge?.canCopy} onClick={() => action('copy-path', selected)}><Copy size={13} /></IconButton><IconButton label={t.edit} disabled={!structured || busy} onClick={() => requestEdit(selected)}><Braces size={13} /></IconButton><IconButton label={t.add} disabled={!structured || !['object', 'array'].includes(typeOf(selectedValue ?? null))} onClick={() => action('add', selected)}><Plus size={14} /></IconButton><button className="subtle-button" disabled={!structured} onClick={() => { if (!samePath(selected, safeFocus)) setFocus(selected); }}>{t.selection}<ChevronRight size={12} /></button></div></div>
+        <div className="selection-bar"><span className={`type-dot type-${selectedValue === undefined ? 'null' : typeOf(selectedValue)}`} /><span className="node-type">{selectedValue === undefined ? '—' : typeOf(selectedValue)}</span><code title={formatPath(selected)}>{formatPath(selected)}</code><div className="selection-actions"><IconButton label={t.copyPath} disabled={!structured || !bridge?.canCopy} onClick={() => action('copy-path', selected)}><Copy size={13} /></IconButton><IconButton label={t.edit} disabled={!structured || busy} onClick={() => requestEdit(selected)}><Braces size={13} /></IconButton><IconButton label={t.add} disabled={!structured || !['object', 'array'].includes(typeOf(selectedValue ?? null))} onClick={() => action('add', selected)}><Plus size={14} /></IconButton></div></div>
       </section>
     </main>
-    <footer className="app-footer"><span><span className={`status-dot ${doc.error ? 'error' : ''}`} />{doc.error ? 'JSON ERROR' : 'JSON'}</span><span>{displayBytes(byteSize(doc.text))}</span><span>{draftEnabled ? t[draftStatus as 'draftSaved'] : t.draftOff}</span><span className="footer-right">{bridge?.embedded ? 'DBX' : 'JSON Grid'}<span>v0.1.0</span></span></footer>
+    <footer className="app-footer"><span><span className={`status-dot ${doc.error ? 'error' : ''}`} />{doc.error ? 'JSON ERROR' : 'JSON'}</span><span>{displayBytes(byteSize(doc.text))}</span><span>{draftEnabled ? t[draftStatus as 'draftSaved'] : t.draftOff}</span><span className="footer-right">{bridge?.embedded ? 'DBX' : 'JSON Grid'}<span>v0.2.0</span></span></footer>
     <input ref={fileInput} type="file" accept="application/json,.json,.txt" hidden onChange={event => { run(() => fromFile(event.target.files?.[0], filePickerEpoch.current)); event.target.value = ''; }} />
     {!bridge && <div className="boot-overlay"><Grid2X2 className="boot-icon" size={28} /><span>{bootError || t.loading}</span>{bootError && <button className="text-button" onClick={() => window.location.reload()}>{locale === 'zh-CN' ? '重新加载' : 'Reload'}</button>}</div>}
     {toast && <div role="status" className="toast"><Check size={15} /><span>{toast}</span><button aria-label={t.close} onClick={() => setToast('')}><X size={13} /></button></div>}
