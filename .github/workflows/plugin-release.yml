@@ -1,21 +1,28 @@
 name: Release DBX plugin
-
 on:
-  release:
-    types: [published]
-
+  push:
+    tags: ['v*']
 permissions:
   contents: write
-
 jobs:
   release:
-    uses: t8y2/dbx/.github/workflows/plugin-release-reusable.yml@plugin-cli-v0.1.10
-    with:
-      release-tag: ${{ github.event.release.tag_name }}
-      package-command: dbx-plugin package .
-      package-path: dist/*.dbxp
-      metadata-path: dist/*.artifact.json
-      plugin-cli-version: 0.1.10
-      go-version: ""
-      rust-toolchain: ""
-      build-matrix: '{"include":[{"runner":"ubuntu-24.04","target":"universal"}]}'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - run: npm run package
+      - run: node scripts/release-metadata.mjs
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+      - name: Publish immutable unsigned candidates
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release create "$RELEASE_TAG" dist/*.dbxp dist/*.artifact.json dist/release-candidates.json dist/SHA256SUMS --verify-tag --title "JSON Grid $RELEASE_TAG" --notes-file docs/release-notes.md

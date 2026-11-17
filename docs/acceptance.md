@@ -1,0 +1,28 @@
+# Acceptance record — 2026-11-17
+
+## Verified locally
+
+- Node 24.16.0, DBX plugin CLI 0.1.10, macOS arm64.
+- TypeScript strict check and Vite static production build.
+- 50 unit/component tests across lossless JSON, bounded grid projection, original paths, typed edits, virtualization, localization, shared document history and Host bridge.
+- Fourteen real Chromium/Playwright browser flows: source/grid edits and undo/redo; tree search, literal special-key path copy and invalid-source recovery; typed edit dialog, export, locale and 390px layout; official DBX development-host opaque iframe, copy and live theme changes; retained schema/sort and stale-inline-draft regressions; repeated Host context identity isolation and deferred import/error/busy races across identity changes.
+- The dev-host iframe uses `sandbox="allow-scripts"`. Plugin parsing and editing run there with no runtime network permission. Browser file input is available as an import fallback.
+- Package contract checks include minimal permissions, version identity, relative local resources, MIT and bundled dependency notices. Official CLI packaging validates the actual manifest and archive.
+
+## Compatibility and precise limits
+
+The published CLI 0.1.10 dev host advertises Host API 1.0.0 and injects a legacy bridge with no `capabilities` object. The plugin targets Host API major 1. Its original `copy()` operation is supported on that bridge; newer clipboard-read, native file-save and state persistence controls require their capability flags and disable on unsupported hosts. No sandbox fallback calls browser storage or browser clipboard APIs.
+
+The installed native DBX version is 0.6.71-beta.20261115.1. Desktop installation/clipboard/file operations are tracked separately from dev-host verification.
+
+- Input: 10 MiB UTF-8; nesting: 256. Parsing is synchronous and is not a streaming large-file engine.
+- Tree: 5,000 visible flattened rows, virtualized at 28px. Focus a subtree to explore beyond the display limit.
+- Grid: up to 50 rows per page; nested row budgets total at most 5,000. At more than 128 columns or 100,000 projected cells, complete row values replace the wide matrix so fields remain accessible.
+- Numeric tokens retain their original lexeme. Sorting uses exact decimal coefficients and BigInt exponents.
+- Duplicate object keys, including escaped equivalent keys, are rejected to prevent silent overwrite.
+- Shared history groups contiguous typing and keeps at most 100 previous snapshots, with an estimated 20 MiB UTF-16 snapshot budget.
+- Draft storage is opt-in: up to two drafts, each at most 96 KiB input, with combined serialized value at most 240 KiB. Excess input removes its stale small draft and displays an unsaved message. Draft persistence is not a substitute for file export.
+
+## Publication status
+
+Source CI, Release publication and official store review/signing/merge must each be checked independently. A store PR containing an unsigned candidate intentionally stays red until a maintainer signs it; this is distinct from source test/build status.

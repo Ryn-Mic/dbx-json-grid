@@ -1,0 +1,24 @@
+{
+  "name": "JSON Grid",
+  "description": "Explore and edit JSON as nested grids, DevTools-style trees and source. Copy JSONPath, search, filter and format locally.",
+  "icon": "assets/plugin.svg",
+  "tags": [
+    "json",
+    "json-grid",
+    "developer-tools",
+    "formatter"
+  ],
+  "permissions": [
+    "host.storage",
+    "host.clipboard:read"
+  ],
+  "homepage": "https://github.com/Ryn-Mic/dbx-json-grid",
+  "license": "MIT",
+  "releaseNotes": "Initial release: editable nested grids and trees, lossless numbers, JSONPath, search/filter, formatting and shared undo/redo.",
+  "localizations": {
+    "zh-CN": {
+      "name": "JSON Grid",
+      "description": "将 JSON 转为可编辑嵌套网格与 DevTools 风格树形，支持路径复制、搜索筛选、格式化和撤销；数据在本地处理。"
+    }
+  }
+}

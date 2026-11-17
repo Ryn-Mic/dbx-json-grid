@@ -1,0 +1,27 @@
+import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import assert from 'node:assert/strict';
+const manifest = JSON.parse(readFileSync('manifest.json', 'utf8'));
+const repository = process.env.GITHUB_REPOSITORY || 'Ryn-Mic/dbx-json-grid';
+const tag = process.env.RELEASE_TAG || `v${manifest.version}`;
+assert.equal(tag, `v${manifest.version}`, 'Release tag must match manifest version');
+const artifacts = readdirSync('dist').filter(name => name.endsWith('.artifact.json')).map(name => {
+  const artifact = JSON.parse(readFileSync(`dist/${name}`, 'utf8'));
+  const filename = name.replace(/\.artifact\.json$/, '.dbxp');
+  const bytes = readFileSync(`dist/${filename}`);
+  assert.equal(createHash('sha256').update(bytes).digest('hex'), artifact.sha256);
+  assert.equal(bytes.length, artifact.size); assert.equal(artifact.signingKeyId, undefined);
+  const entries = execFileSync('unzip', ['-Z1', `dist/${filename}`], { encoding: 'utf8' }).split(/\r?\n/);
+  assert.ok(!entries.includes('signature.json'), 'Candidate must be unsigned');
+  const packed = JSON.parse(execFileSync('unzip', ['-p', `dist/${filename}`, 'manifest.json'], { encoding: 'utf8' }));
+  for (const key of ['id', 'version', 'publisher']) assert.equal(packed[key], manifest[key]);
+  artifact.url = `https://github.com/${repository}/releases/download/${tag}/${filename}`;
+  writeFileSync(`dist/${name}`, JSON.stringify(artifact, null, 2) + '\n'); return artifact;
+});
+assert.equal(artifacts.length, 1); assert.equal(artifacts[0].target, 'universal');
+const plugin = Object.fromEntries(['id', 'name', 'description', 'publisher', 'version'].map(key => [key, manifest[key]]));
+plugin.permissions = [...manifest.permissions].sort();
+writeFileSync('dist/release-candidates.json', JSON.stringify({ plugin, artifacts }, null, 2) + '\n');
+writeFileSync('dist/SHA256SUMS', artifacts.map(a => `${a.sha256}  ${new URL(a.url).pathname.split('/').pop()}`).join('\n') + '\n');
+console.log(`Release metadata verified for ${manifest.id}@${manifest.version}.`);
