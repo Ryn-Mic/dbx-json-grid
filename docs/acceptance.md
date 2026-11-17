@@ -4,8 +4,8 @@
 
 - Node 24.16.0, DBX plugin CLI 0.1.10, macOS arm64.
 - TypeScript strict check and Vite static production build.
-- 50 unit/component tests across lossless JSON, bounded grid projection, original paths, typed edits, virtualization, localization, shared document history and Host bridge.
-- Fourteen real Chromium/Playwright browser flows: source/grid edits and undo/redo; tree search, literal special-key path copy and invalid-source recovery; typed edit dialog, export, locale and 390px layout; official DBX development-host opaque iframe, copy and live theme changes; retained schema/sort and stale-inline-draft regressions; repeated Host context identity isolation and deferred import/error/busy races across identity changes.
+- 55 unit/component tests across lossless JSON, bounded grid projection, original paths, typed edits, virtualization, localization, shared document history and Host bridge.
+- Eighteen real Chromium/Playwright browser flows: source/grid edits and undo/redo; tree search, literal special-key path copy and invalid-source recovery; typed edit dialog, export, locale and 390px layout; official DBX development-host opaque iframe, copy and live theme changes; retained schema/sort and stale-inline-draft regressions; repeated Host context identity isolation and deferred import/error/busy races across identity changes; disabling/clearing drafts during deferred reads/writes.
 - The dev-host iframe uses `sandbox="allow-scripts"`. Plugin parsing and editing run there with no runtime network permission. Browser file input is available as an import fallback.
 - Package contract checks include minimal permissions, version identity, relative local resources, MIT and bundled dependency notices. Official CLI packaging validates the actual manifest and archive.
 
