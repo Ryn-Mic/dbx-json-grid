@@ -36,3 +36,35 @@ describe('grid projection', () => {
     expect(matchesText(parseJson('1.2300'), '2300')).toBe(true);
   });
 });
+
+describe('bounded grids and exact numeric ordering', () => {
+  it('falls back to intact rows for a sparse wide schema', () => {
+    const value = parseJson(JSON.stringify(Array.from({length:10000},(_,i) => ({['field'+i]: i}))));
+    const model = gridModel(value, []);
+    expect(model.columnCount).toBe(10000);
+    expect(model.columns).toEqual(['value']);
+    expect(model.notice).toMatch(/whole|complete/i);
+    expect(model.rows.reduce((count,row) => count + row.cells.length,0)).toBe(10000);
+    expect(model.rows[9999].cells[0]).toMatchObject({path:[9999],value:getAt(value,[9999]),missing:false});
+  });
+  it('bounds dense cell allocation even with fewer than 128 fields', () => {
+    const value = parseJson(JSON.stringify(Array.from({length:10000},(_,i) => ({['field'+(i%20)]:i}))));
+    const model = gridModel(value, []);
+    expect(model.columnCount).toBe(20);
+    expect(model.columns).toEqual(['value']);
+    expect(model.notice).toBeTruthy();
+  });
+  it('compares huge positive and negative exponents exactly', () => {
+    const cases = [
+      ['1e9007199254740992','1e9007199254740993',-1],
+      ['9e9007199254740992','1e9007199254740993',-1],
+      ['1e-9007199254740993','1e-9007199254740992',-1],
+      ['-9e9007199254740992','-1e9007199254740993',1],
+      ['10e9007199254740992','1e9007199254740993',0],
+      ['0e9007199254740993','-0.000e-9007199254740993',0],
+      ['0.00100','1e-3',0],
+      ['-0.9','-1',1],
+    ] as const;
+    for (const [a,b,result] of cases) expect(compareValues(parseJson(a),parseJson(b))).toBe(result);
+  });
+});
