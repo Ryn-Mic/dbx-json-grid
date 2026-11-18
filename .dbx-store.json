@@ -14,7 +14,7 @@
   ],
   "homepage": "https://github.com/Ryn-Mic/dbx-json-grid",
   "license": "MIT",
-  "releaseNotes": "Cancel inline key/value drafts on confirmed clicks or focus transfers elsewhere inside the plugin. Preserve the editor and draft when the window loses focus, then resume on return. Enter commits; Escape cancels. No host integration required.",
+  "releaseNotes": "Align source fold chevrons with line numbers. Simplify object tables to key/value rows, use one-based row numbers for arrays, share header and row-number colors, and remove table caption and summary rows.",
   "localizations": {
     "zh-CN": {
       "name": "JSON Grid",

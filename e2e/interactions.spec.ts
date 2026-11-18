@@ -227,7 +227,7 @@ test("filters start as icons, keep predicates when closed, clear explicitly, and
   await expect(
     view.getByRole("textbox", { name: "筛选 score", exact: true }),
   ).toHaveCount(0);
-  await view.getByRole("textbox", { name: "筛选 #", exact: true }).fill("=0");
+  await view.getByRole("textbox", { name: "筛选 #", exact: true }).fill("=1");
   await expect(view.locator(".jg-value")).toHaveText(["2"]);
 });
 
@@ -273,7 +273,7 @@ test("single nested toggles grow the parent column and push later columns, inclu
   await expect(grid(page, [0, "object"]).locator(".jg-value")).toHaveText([
     "3",
   ]);
-  await expect(page.locator(".jg-grid-caption")).toHaveCount(1);
+  await expect(page.locator(".jg-grid-caption")).toHaveCount(0);
   await replaceSource(page, page.locator(".cm-content"), '[[1],{"z":2}]');
   await expect(
     page.getByRole("button", { name: "展开 list[1]", exact: true }),

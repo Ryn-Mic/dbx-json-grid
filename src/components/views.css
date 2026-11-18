@@ -23,22 +23,9 @@
 .jg-nested-grid .jg-nested-grid {
   margin: 5px 0;
 }
-.jg-grid-caption {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
-  background: var(--jg-bg);
-  font-weight: 600;
-}
 .jg-muted,
-.jg-colon,
-.jg-row-key small {
+.jg-colon {
   color: var(--jg-muted);
-}
-.jg-grid-caption .jg-muted {
-  margin-left: auto;
-  font-weight: 400;
 }
 .jg-grid-scroll {
   overflow: visible;
@@ -61,7 +48,7 @@
   position: sticky;
   top: 0;
   z-index: 2;
-  background: var(--jg-panel);
+  background: var(--jg-table-header);
 }
 .jg-table thead input {
   display: block;
@@ -92,13 +79,15 @@
 .jg-key-editor input { width: 100%; min-width: 40px; }
 .jg-container-toggle { display: inline-flex; align-items: center; text-align: left; white-space: nowrap; padding-left: 0 !important; }
 .jg-grid-notice { padding: 8px; color: var(--jg-muted); }
-.jg-table .jg-row-key {
-  background: var(--jg-bg);
+.jg-table > tbody > tr > .jg-row-key {
+  background: var(--jg-table-header);
   font-weight: 400;
 }
-.jg-row-key small {
-  display: block;
-  font-size: 10px;
+.jg-table > tbody > tr > td {
+  background: var(--jg-panel);
+}
+.jg-table > tbody > tr > :has(> .jg-resize) {
+  position: relative;
 }
 .jg-cell-value {
   display: flex;
@@ -132,7 +121,7 @@
   background: var(--jg-accent-soft) !important;
   box-shadow: inset 2px 0 var(--jg-accent);
 }
-.jg-table tbody tr:hover > td,
+.jg-table > tbody > tr:hover > td,
 .jg-tree-row:hover {
   background: var(--jg-hover);
 }
@@ -188,13 +177,12 @@
 .jg-pagination {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 4px 9px;
+  justify-content: flex-end;
+  gap: 5px;
+  padding: 2px 6px;
+  border-bottom: 1px solid var(--jg-border);
   color: var(--jg-muted);
   font-size: 11px;
-}
-.jg-pagination > span:first-child {
-  margin-right: auto;
 }
 .jg-tree {
   height: 100%;

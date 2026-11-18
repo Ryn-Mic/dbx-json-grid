@@ -98,7 +98,7 @@ describe("editable JSON views", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Filter score" }), {
       target: { value: "<2" },
     });
-    expect(screen.queryByText("2")).toBeNull();
+    expect(screen.queryByText("2", { selector: ".jg-value" })).toBeNull();
     fireEvent.doubleClick(screen.getByText("1", { selector: ".jg-value" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Edit value" }), {
       target: { value: "3" },
@@ -203,9 +203,9 @@ describe("editable JSON views", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "筛选 score" }), {
       target: { value: ">49" },
     });
-    expect(screen.getByText("1 行")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "上一页" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "下一页" })).toBeDisabled();
+    expect(screen.getByText("50", { selector: ".jg-value" })).toBeTruthy();
+    expect(screen.queryByRole("navigation", { name: "表格分页" })).toBeNull();
+    expect(screen.queryByText("1 行")).toBeNull();
     fireEvent.change(screen.getByRole("textbox", { name: "筛选 score" }), {
       target: { value: ">100" },
     });
@@ -223,7 +223,8 @@ describe("editable JSON views", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "1 行、129 个字段超出表格显示上限",
     );
-    expect(screen.getByRole("button", { name: "展开表格" })).toBeTruthy();
+    expect(screen.getByRole("table")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "展开 object[129]" })).toBeTruthy();
   });
   it("keeps sample order rows visible while nesting stays collapsed by default", () => {
     render(<GridView {...props(SAMPLE)} />);

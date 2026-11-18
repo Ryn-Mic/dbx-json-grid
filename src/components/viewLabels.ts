@@ -15,13 +15,12 @@ const en = {
   expand: "Expand",
   collapse: "Collapse",
   root: "root",
-  expandGrid: "Expand grid",
-  collapseGrid: "Collapse grid",
   treeLimit:
     "Showing the first 5,000 nodes. Collapse branches to see other nodes.",
   noNodes: "No matching nodes",
-  jsonData: "JSON data",
-  index: "Key / index",
+  key: "Key",
+  value: "Value",
+  pagination: "Table pages",
   sort: "Sort",
   resize: "Resize",
   filter: "Filter",
@@ -36,7 +35,6 @@ const en = {
   empty: "Empty container",
   previous: "Previous page",
   next: "Next page",
-  rows: (count: number) => `${count} rows`,
   wide: (columns: number, rows: number) =>
     `Showing complete row values: ${columns} fields across ${rows} rows exceed the grid display limit.`,
 };
@@ -55,12 +53,11 @@ const zh: typeof en = {
   expand: "展开",
   collapse: "折叠",
   root: "根节点",
-  expandGrid: "展开表格",
-  collapseGrid: "折叠表格",
   treeLimit: "仅显示前 5,000 个节点。请折叠分支以查看其他节点。",
   noNodes: "没有匹配的节点",
-  jsonData: "JSON 数据",
-  index: "键名 / 索引",
+  key: "键",
+  value: "值",
+  pagination: "表格分页",
   sort: "排序",
   resize: "调整列宽",
   filter: "筛选",
@@ -75,7 +72,6 @@ const zh: typeof en = {
   empty: "空容器",
   previous: "上一页",
   next: "下一页",
-  rows: (count: number) => `${count} 行`,
   wide: (columns: number, rows: number) =>
     `${rows} 行、${columns} 个字段超出表格显示上限，改为显示每行的完整值。`,
 };

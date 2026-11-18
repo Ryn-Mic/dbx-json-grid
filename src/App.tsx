@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { json } from '@codemirror/lang-json';
+import { foldGutter } from '@codemirror/language';
 import { EditorView } from '@codemirror/view';
 import { ArrowDown, ArrowUp, Braces, Check, ChevronRight, ChevronsDownUp, ChevronsUpDown, ClipboardPaste, Copy, Download, FileJson, FolderOpen, Grid2X2, ListTree, Maximize2, Minimize2, Moon, MoreHorizontal, Plus, Redo2, Search, ShieldCheck, SlidersHorizontal, Sun, Undo2, X } from 'lucide-react';
 import { formatPath, getAt, insertAt, parseJson, removeAt, renameAt, renameColumn, setAt, stringifyJson, typeOf, type JsonPath, type JsonValue } from './core/json';
@@ -14,6 +15,7 @@ import { useDocument } from './useDocument';
 import { ResizeHandle } from './components/ResizeHandle';
 import { parseSource, sourceRange } from './core/source';
 import { highlightSource, sourceHighlight } from './sourceHighlight';
+import { sourceFoldMarker } from './sourceFoldMarker';
 
 type Kind = 'string' | 'number' | 'boolean' | 'null' | 'object' | 'array';
 type Modal = { mode: 'edit' | 'add' | 'rename' | 'delete'; path: JsonPath; kind: Kind; key: string; text: string };
@@ -250,7 +252,7 @@ export function App() {
     };
     window.addEventListener('keydown', key, true); return () => window.removeEventListener('keydown', key, true);
   });
-  const editorExtensions = useMemo(() => [json(), sourceHighlight, EditorView.lineWrapping, EditorView.theme({ '&': { fontSize: `${fontSize}px`, backgroundColor: 'transparent' }, '.cm-scroller': { fontFamily: 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace)' }, '.cm-gutters': { backgroundColor: 'transparent', border: 'none', color: 'var(--jg-muted)' }, '.cm-content': { padding: '16px 0' } })], [fontSize]);
+  const editorExtensions = useMemo(() => [json(), sourceHighlight, foldGutter({ markerDOM: open => sourceFoldMarker(open, locale) }), EditorView.lineWrapping, EditorView.theme({ '&': { fontSize: `${fontSize}px`, backgroundColor: 'transparent' }, '.cm-scroller': { fontFamily: 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace)' }, '.cm-gutters': { backgroundColor: 'transparent', border: 'none', color: 'var(--jg-muted)' }, '.cm-content': { padding: '16px 0' } })], [fontSize, locale]);
   const sourceTree = useMemo(() => value === undefined ? null : parseSource(doc.text), [doc.text, value]);
   const selectedRange = useMemo(() => selectionActive ? sourceRange(doc.text, sourceTree, selected) : null, [doc.text, sourceTree, selected, selectionActive]);
   useEffect(() => {
@@ -315,7 +317,7 @@ export function App() {
         <div className="pane-header"><div className="pane-title"><Braces size={14} />{t.source}<span className="source-label">JSON</span></div>
           <div className="pane-actions"><button className="subtle-button" disabled={!structured} onClick={() => run(() => doc.edit(stringifyJson(value!, 2)))}>{t.format}</button><button className="subtle-button" disabled={!structured} onClick={() => run(() => doc.edit(stringifyJson(value!)))}>{t.minify}</button><IconButton label={layout === 'source' ? t.split : t.focusSource} onClick={() => setLayout(layout === 'source' ? 'split' : 'source')}>{layout === 'source' ? <Minimize2 size={13} /> : <Maximize2 size={13} />}</IconButton></div>
         </div>
-        <div className="editor-wrap"><CodeMirror value={doc.text} readOnly={busy} height="100%" theme={appearance} extensions={editorExtensions} basicSetup={{ history: false, foldGutter: true, highlightActiveLine: true, autocompletion: false }} onChange={text => doc.edit(text, true)} onCreateEditor={view => { editorRef.current = view; }} aria-label={t.source} /></div>
+        <div className="editor-wrap"><CodeMirror value={doc.text} readOnly={busy} height="100%" theme={appearance} extensions={editorExtensions} basicSetup={{ history: false, foldGutter: false, highlightActiveLine: true, autocompletion: false }} onChange={text => doc.edit(text, true)} onCreateEditor={view => { editorRef.current = view; }} aria-label={t.source} /></div>
         <div className={`source-status ${doc.error ? 'invalid' : ''}`}><span>{doc.error ? <X size={12} /> : <Check size={12} />}{doc.error ? t.invalid : structured ? t.valid : 'JSON'}</span><span>{doc.text.split('\n').length} {t.lines}</span></div>
         {doc.error && <div className="parse-error" role="alert">{doc.error}</div>}
       </section>
@@ -330,7 +332,7 @@ export function App() {
         <div className="selection-bar"><span className={`type-dot type-${selectedValue === undefined ? 'null' : typeOf(selectedValue)}`} /><span className="node-type">{selectedValue === undefined ? '—' : typeOf(selectedValue)}</span><code title={formatPath(selected)}>{formatPath(selected)}</code><div className="selection-actions"><IconButton label={t.copyPath} disabled={!structured || !bridge?.canCopy} onClick={() => action('copy-path', selected)}><Copy size={13} /></IconButton><IconButton label={t.edit} disabled={!structured || busy} onClick={() => requestEdit(selected)}><Braces size={13} /></IconButton><IconButton label={t.add} disabled={!structured || !['object', 'array'].includes(typeOf(selectedValue ?? null))} onClick={() => action('add', selected)}><Plus size={14} /></IconButton></div></div>
       </section>
     </main>
-    <footer className="app-footer"><span><span className={`status-dot ${doc.error ? 'error' : ''}`} />{doc.error ? 'JSON ERROR' : 'JSON'}</span><span>{displayBytes(byteSize(doc.text))}</span><span>{draftEnabled ? t[draftStatus as 'draftSaved'] : t.draftOff}</span><span className="footer-right">{bridge?.embedded ? 'DBX' : 'JSON Grid'}<span>v0.2.2</span></span></footer>
+    <footer className="app-footer"><span><span className={`status-dot ${doc.error ? 'error' : ''}`} />{doc.error ? 'JSON ERROR' : 'JSON'}</span><span>{displayBytes(byteSize(doc.text))}</span><span>{draftEnabled ? t[draftStatus as 'draftSaved'] : t.draftOff}</span><span className="footer-right">{bridge?.embedded ? 'DBX' : 'JSON Grid'}<span>v0.2.3</span></span></footer>
     <input ref={fileInput} type="file" accept="application/json,.json,.txt" hidden onChange={event => { run(() => fromFile(event.target.files?.[0], filePickerEpoch.current)); event.target.value = ''; }} />
     {!bridge && <div className="boot-overlay"><Grid2X2 className="boot-icon" size={28} /><span>{bootError || t.loading}</span>{bootError && <button className="text-button" onClick={() => window.location.reload()}>{locale === 'zh-CN' ? '重新加载' : 'Reload'}</button>}</div>}
     {toast && <div role="status" className="toast"><Check size={15} /><span>{toast}</span><button aria-label={t.close} onClick={() => setToast('')}><X size={13} /></button></div>}

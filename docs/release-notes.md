@@ -1,13 +1,9 @@
-# JSON Grid 0.2.2
+# JSON Grid 0.2.3
 
-- 双击行内编辑字段名或值时，点击插件内其他单元格、源码区或空白处，会取消编辑并丢弃未提交修改。
-- 插件内用 Tab 等方式将焦点移到其他控件，也会取消编辑；再次双击另一个单元格只保留新的编辑框。
-- 切到其他应用或插件外宿主区域时保留编辑框和草稿，回来继续。不会仅凭 blur 或空的焦点去向丢弃内容，不要求宿主配合。
-- Enter 提交、Esc 取消保持不变。JSON 源码、撤销历史或文档发生变化时，仍清理过期编辑草稿。
-- 展开、选中、搜索、筛选、列宽、分页等 tab 状态保留功能不变；切换插件内部 tab 会取消未提交的行内编辑。
+- 源码折叠箭头与行号垂直居中，长行换行时仍对齐首行。
+- 对象网格直接显示键和值，移除表头、顶部「JSON 数据」和底部汇总；嵌套对象同样适用。
+- 所有数组网格的 `#` 行号从 1 开始，排序和筛选时保留原始行号；JSONPath 继续使用零基下标。
+- 表头和行号列同色，与数据区域区分；深色主题下略亮，浅色主题下略深。
+- 仅在需要翻页时于表格上方显示分页控件，保留列宽调整、数组列筛选和排序。
 
-Inline keys and values now cancel on confirmed interactions elsewhere inside the plugin document. Window focus loss preserves the editor and its draft. Returning to the editor continues editing; Enter commits and Escape cancels. No host focus API or new permissions are required.
-
-Verified with65 unit/component tests and40 browser cases, including real Chromium focus-loss/recovery with focus emulation disabled and the official DBX opaque-origin development host. Native desktop acceptance is tracked separately.
-
-MIT licensed. Static universal plugin; permissions remain `host.storage` and `host.clipboard:read`. The `.dbxp` is an unsigned review candidate. Official marketplace publication requires DBX Store maintainer review, signing and merge.
+MIT licensed. The universal `.dbxp` is an unsigned candidate for DBX Store review.

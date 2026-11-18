@@ -12,7 +12,7 @@ async function openGridLeft(page: Page) {
   await panel(page)
     .getByRole("button", { name: "展开 left{1}", exact: true })
     .click();
-  await panel(page).getByText("1", { exact: true }).last().click();
+  await panel(page).locator(".jg-value").getByText("1", { exact: true }).click();
   await expect(page.locator(".selection-bar code")).toHaveText(
     "$[0].left.leaf",
   );
@@ -63,8 +63,9 @@ test("each tab restores its own nested expansion, selection and source highlight
   await expect(page.locator(".cm-json-selected")).toContainText('"leaf": 2');
   await switchTab(page, "网格");
   await expect(
-    panel(page).getByRole("button", { name: "展开表格", exact: true }),
+    panel(page).getByRole("button", { name: "展开 left{1}", exact: true }),
   ).toBeVisible();
+  await expect(panel(page).getByRole("table")).toBeVisible();
   await expect(page.locator(".selection-bar code")).toHaveText(
     "$[0].left.leaf",
   );
